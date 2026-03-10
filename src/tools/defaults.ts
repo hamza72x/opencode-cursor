@@ -18,7 +18,7 @@ export function registerDefaultTools(registry: ToolRegistry): void {
         },
         timeout: {
           type: "number",
-          description: "Timeout in milliseconds (default: 30000)"
+          description: "Timeout in seconds (default: 30)"
         },
         cwd: {
           type: "string",
@@ -29,25 +29,49 @@ export function registerDefaultTools(registry: ToolRegistry): void {
     },
     source: "local" as const
   }, async (args) => {
-    const { exec } = await import("child_process");
-    const { promisify } = await import("util");
-    const execAsync = promisify(exec);
+    const { spawn } = await import("child_process");
 
-    try {
-      const command = resolveBashCommand(args);
-      if (!command) {
-        throw new Error("bash: missing required argument 'command'");
-      }
-      const timeout = resolveTimeout(args.timeout);
-      const cwd = resolveWorkingDirectory(args);
-      const { stdout, stderr } = await execAsync(command, {
-        timeout: timeout ?? 30000,
-        cwd: cwd
-      });
-      return stdout || stderr || "Command executed successfully";
-    } catch (error: any) {
-      throw error;
+    const command = resolveBashCommand(args);
+    if (!command) {
+      throw new Error("bash: missing required argument 'command'");
     }
+    const timeoutMs = resolveTimeoutMs(args.timeout);
+    const cwd = resolveWorkingDirectory(args);
+
+    return new Promise<string>((resolve, reject) => {
+      const proc = spawn(command, {
+        shell: process.env.SHELL || "/bin/bash",
+        cwd,
+      });
+
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
+      let timedOut = false;
+
+      const timer = setTimeout(() => {
+        timedOut = true;
+        proc.kill("SIGTERM");
+      }, timeoutMs);
+
+      proc.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+      proc.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+
+      proc.on("close", (code) => {
+        clearTimeout(timer);
+        const stdout = Buffer.concat(stdoutChunks).toString("utf8");
+        const stderr = Buffer.concat(stderrChunks).toString("utf8");
+        const output = stdout || stderr || "Command executed successfully";
+        if (timedOut) {
+          resolve(`Command timed out after ${timeoutMs / 1000}s\n${output}`);
+        } else if (code !== 0) {
+          resolve(`${output}\n[Exit code: ${code}]`);
+        } else {
+          resolve(output);
+        }
+      });
+
+      proc.on("error", reject);
+    });
   });
 
   // 2. Read tool - Read file contents
@@ -596,6 +620,14 @@ function resolveTimeout(value: unknown): number | undefined {
     }
   }
   return undefined;
+}
+
+// Convert model-supplied timeout (seconds) to milliseconds. Falls back to 30s.
+function resolveTimeoutMs(value: unknown): number {
+  const raw = resolveTimeout(value);
+  if (raw === undefined) return 30_000;
+  // Values ≤ 600 are treated as seconds (no real use case for a <600ms shell timeout).
+  return raw <= 600 ? raw * 1000 : raw;
 }
 
 function resolveBoolean(value: unknown, defaultValue: boolean): boolean {
