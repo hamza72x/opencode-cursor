@@ -143,49 +143,16 @@ opencode run "your prompt" --model cursor-acp/sonnet-4.5
 
 ## MCP Tool Bridge
 
-The plugin bridges MCP (Model Context Protocol) servers into Cursor models via a `mcptool` CLI. Any MCP server configured in `opencode.json` becomes callable through cursor-agent's Shell tool.
-
-### Configure MCP servers
-
-Add to `~/.config/opencode/opencode.json`:
-
-```json
-{
-  "mcp": {
-    "hybrid-memory": {
-      "type": "local",
-      "command": ["node", "/path/to/mcp-server.js"],
-      "environment": {}
-    },
-    "playwright": {
-      "type": "local",
-      "command": ["npx", "-y", "@playwright/mcp", "--headless"],
-      "environment": {}
-    }
-  }
-}
-```
-
-### mcptool CLI
-
-Installed automatically with the plugin:
+Any MCP servers already configured in your `opencode.json` work automatically with cursor-acp models — no extra setup needed. The plugin discovers them at startup and injects usage instructions into the system prompt so the model calls them via cursor-agent's Shell tool.
 
 ```bash
-mcptool servers                                    # list configured servers
+mcptool servers                                    # list discovered servers
 mcptool tools [server]                             # list available tools
-mcptool call hybrid-memory memory_stats            # call a tool
+mcptool call hybrid-memory memory_stats            # call a tool manually
 mcptool call playwright browser_navigate '{"url":"https://example.com"}'
 ```
 
-The model uses `mcptool` via Shell automatically — no manual intervention needed. The plugin injects usage instructions into the system prompt.
-
-### Supported MCP servers
-
-Any MCP server using stdio transport works. Tested with:
-- **hybrid-memory** — persistent memory with semantic search
-- **@modelcontextprotocol/server-filesystem** — file operations
-- **@playwright/mcp** — headless browser automation
-- **@modelcontextprotocol/server-everything** — MCP test/reference server
+Any MCP server using stdio transport works. Tested with hybrid-memory, @modelcontextprotocol/server-filesystem, @playwright/mcp, and @modelcontextprotocol/server-everything.
 
 ## Architecture
 

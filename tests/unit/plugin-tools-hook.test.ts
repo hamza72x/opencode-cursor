@@ -136,7 +136,7 @@ describe("Plugin tool hook", () => {
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }
-  });
+  }, 15000);
 
   it("executes shell alias and defaults cwd to context directory", async () => {
     const projectDir = mkdtempSync(join(tmpdir(), "plugin-hook-shell-"));

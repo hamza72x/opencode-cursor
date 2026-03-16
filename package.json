@@ -1,13 +1,13 @@
 {
   "name": "@rama_nigg/open-cursor",
-  "version": "2.3.17",
+  "version": "2.3.18",
   "description": "No prompt limits. No broken streams. Full thinking + tool support. Your Cursor subscription, properly integrated.",
   "type": "module",
   "main": "dist/plugin-entry.js",
   "module": "src/plugin-entry.ts",
   "scripts": {
-    "build": "bun build ./src/index.ts ./src/plugin-entry.ts ./src/cli/discover.ts ./src/cli/opencode-cursor.ts ./src/cli/mcptool.ts --outdir ./dist --target node",
-    "dev": "bun build ./src/index.ts ./src/plugin-entry.ts ./src/cli/discover.ts ./src/cli/opencode-cursor.ts ./src/cli/mcptool.ts --outdir ./dist --target node --watch",
+    "build": "bun build ./src/index.ts ./src/plugin-entry.ts ./src/cli/discover.ts ./src/cli/opencode-cursor.ts ./src/cli/mcptool.ts --outdir ./dist --target node --external @opencode-ai/plugin --external zod",
+    "dev": "bun build ./src/index.ts ./src/plugin-entry.ts ./src/cli/discover.ts ./src/cli/opencode-cursor.ts ./src/cli/mcptool.ts --outdir ./dist --target node --watch --external @opencode-ai/plugin --external zod",
     "test": "bun test",
     "test:unit": "bun test tests/unit",
     "test:integration": "bun test tests/integration",
