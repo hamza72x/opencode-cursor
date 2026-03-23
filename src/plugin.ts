@@ -362,11 +362,12 @@ function createChatCompletionChunk(id: string, created: number, model: string, d
   };
 }
 
-function extractCompletionFromStream(output: string): { assistantText: string; reasoningText: string } {
+export function extractCompletionFromStream(output: string): { assistantText: string; reasoningText: string } {
   const lines = output.split("\n");
   let assistantText = "";
   let reasoningText = "";
   let sawAssistantPartials = false;
+  let sawThinkingPartials = false;
 
   for (const line of lines) {
     const event = parseStreamJsonLine(line);
@@ -390,7 +391,13 @@ function extractCompletionFromStream(output: string): { assistantText: string; r
     if (isThinking(event)) {
       const thinking = extractThinking(event);
       if (thinking) {
-        reasoningText += thinking;
+        const isPartial = typeof (event as any).timestamp_ms === "number";
+        if (isPartial) {
+          reasoningText += thinking;
+          sawThinkingPartials = true;
+        } else if (!sawThinkingPartials) {
+          reasoningText += thinking;
+        }
       }
     }
   }
