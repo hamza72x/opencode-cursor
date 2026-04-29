@@ -82,7 +82,7 @@ Cursor fields are mapped as follows:
 
 Non-stream responses include `usage` on the chat completion response. Stream responses emit the normal final stop chunk, then a usage-only chunk with `choices: []`, then `[DONE]`.
 
-Cost is only passed through when a provider reports it as `cost`, `totalCost`, or `total_cost`. Cursor currently reports tokens but not request cost, so the proxy does not invent pricing. If cost display is required, it should come from OpenCode model cost configuration or a future Cursor-reported cost field.
+Cost is passed through when a provider reports it as `cost`, `totalCost`, or `total_cost`. Cursor currently reports tokens but not request cost, so `open-cursor install` and `open-cursor sync-models` also write OpenCode `cost` config for known Cursor models using the official prices from [Cursor Models & Pricing](https://cursor.com/docs/models-and-pricing). Prices are stored per million tokens as `input`, `output`, `cache_read`, `cache_write`, and `context_over_200k` when Cursor documents a long-context rate.
 
 ## Operational Notes
 

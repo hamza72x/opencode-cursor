@@ -14,6 +14,7 @@ import {
 import { homedir } from "os";
 import { basename, dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
+import { applyCursorModelCost } from "../models/pricing.js";
 import {
   discoverModelsFromCursorAgent,
   fallbackModels,
@@ -411,6 +412,15 @@ function discoverModelsSafe() {
   }
 }
 
+function syncModelEntry(config: any, model: { id: string; name: string }): void {
+  const current = config.provider[PROVIDER_ID].models[model.id];
+  const existing = current && typeof current === "object" && !Array.isArray(current) ? current : {};
+  config.provider[PROVIDER_ID].models[model.id] = applyCursorModelCost(model.id, {
+    ...existing,
+    name: model.name,
+  });
+}
+
 function installAiSdk(opencodeDir: string) {
   try {
     execFileSync("bun", ["install", "@ai-sdk/openai-compatible"], {
@@ -437,7 +447,7 @@ function commandInstall(options: Options) {
   if (!options.skipModels) {
     const models = discoverModelsSafe();
     for (const model of models) {
-      config.provider[PROVIDER_ID].models[model.id] = { name: model.name };
+      syncModelEntry(config, model);
     }
     console.log(`Models synced: ${models.length}`);
   }
@@ -457,7 +467,7 @@ function commandSyncModels(options: Options) {
 
   const models = discoverModelsSafe();
   for (const model of models) {
-    config.provider[PROVIDER_ID].models[model.id] = { name: model.name };
+    syncModelEntry(config, model);
   }
 
   writeConfig(configPath, config, options.noBackup === true);
