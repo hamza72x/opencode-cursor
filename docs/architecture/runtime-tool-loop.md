@@ -66,6 +66,24 @@ The OpenCode plugin tool hook (`buildToolHookEntries` in `src/plugin.ts`) regist
 
 When tool-hook execution is used, path/cwd defaults are normalized against tool context (`worktree` / `directory`) to keep file and shell behavior workspace-aware.
 
+## Usage Metrics
+
+`cursor-agent --output-format stream-json` emits a final `result` event with token usage when Cursor reports it. The proxy maps that payload to OpenAI-compatible usage so OpenCode can emit `step-finish` token data for tools such as OpenCode TokenSpeed Monitor.
+
+Cursor fields are mapped as follows:
+
+- `inputTokens + cacheReadTokens + cacheWriteTokens` -> `usage.prompt_tokens`
+- `outputTokens` -> `usage.completion_tokens`
+- `reasoningTokens` -> `usage.completion_tokens_details.reasoning_tokens`
+- `cacheReadTokens` -> `usage.prompt_tokens_details.cached_tokens`
+- `cacheWriteTokens` -> `usage.prompt_tokens_details.cache_write_tokens`
+
+`prompt_tokens` includes cache tokens because OpenAI-compatible parsers treat `cached_tokens` as a subset of total prompt tokens.
+
+Non-stream responses include `usage` on the chat completion response. Stream responses emit the normal final stop chunk, then a usage-only chunk with `choices: []`, then `[DONE]`.
+
+Cost is only passed through when a provider reports it as `cost`, `totalCost`, or `total_cost`. Cursor currently reports tokens but not request cost, so the proxy does not invent pricing. If cost display is required, it should come from OpenCode model cost configuration or a future Cursor-reported cost field.
+
 ## Operational Notes
 
 - Proxy reuse is enabled by default (`CURSOR_ACP_REUSE_EXISTING_PROXY`); this can reuse an already-running process on port `32124`.

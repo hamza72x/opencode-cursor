@@ -1,5 +1,22 @@
-export function createChatCompletionResponse(model: string, content: string) {
-  return {
+import type { OpenAiUsage } from "../usage.js";
+
+export function createChatCompletionResponse(
+  model: string,
+  content: string,
+  usage?: OpenAiUsage,
+) {
+  const response: {
+    id: string;
+    object: string;
+    created: number;
+    model: string;
+    choices: Array<{
+      index: number;
+      message: { role: string; content: string };
+      finish_reason: string;
+    }>;
+    usage?: OpenAiUsage;
+  } = {
     id: `cursor-acp-${Date.now()}`,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
@@ -8,15 +25,16 @@ export function createChatCompletionResponse(model: string, content: string) {
       {
         index: 0,
         message: { role: "assistant", content },
-        finish_reason: "stop"
+        finish_reason: "stop",
       }
     ],
-    usage: {
-      prompt_tokens: 0,
-      completion_tokens: 0,
-      total_tokens: 0
-    }
   };
+
+  if (usage) {
+    response.usage = usage;
+  }
+
+  return response;
 }
 
 export function createChatCompletionChunk(
@@ -24,7 +42,7 @@ export function createChatCompletionChunk(
   created: number,
   model: string,
   deltaContent: string,
-  done = false
+  done = false,
 ) {
   return {
     id,
@@ -35,8 +53,8 @@ export function createChatCompletionChunk(
       {
         index: 0,
         delta: deltaContent ? { content: deltaContent } : {},
-        finish_reason: done ? "stop" : null
+        finish_reason: done ? "stop" : null,
       }
-    ]
+    ],
   };
 }
