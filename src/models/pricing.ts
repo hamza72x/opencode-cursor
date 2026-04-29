@@ -6,6 +6,29 @@ export type OpenCodeModelCost = {
   context_over_200k?: OpenCodeModelCost;
 };
 
+export type CursorPricingCoverage = {
+  priced: string[];
+  missing: string[];
+};
+
+export const CURSOR_PRICING_DOC_URL = "https://cursor.com/docs/models-and-pricing";
+
+export const CURSOR_PRICING_DOC_MARKERS = [
+  "Auto",
+  "Composer 2",
+  "Composer 1.5",
+  "Claude 4.6",
+  "Claude 4.6 Sonnet",
+  "Claude Opus 4.7",
+  "Gemini 3.1 Pro",
+  "Gemini 3 Flash",
+  "GPT-5.3 Codex",
+  "GPT-5.4",
+  "GPT-5.5",
+  "Grok 4.20",
+  "Kimi K2.5",
+];
+
 // Official Cursor prices per 1M tokens from https://cursor.com/docs/models-and-pricing.
 const AUTO_COST = cost(1.25, 6, 0.25, 1.25);
 const COMPOSER_2_COST = cost(0.5, 2.5, 0.2, 0.5);
@@ -82,6 +105,21 @@ export function applyCursorModelCost<T extends Record<string, unknown>>(
   const modelCost = getCursorModelCost(modelId);
   if (!modelCost) return entry;
   return { ...entry, cost: modelCost };
+}
+
+export function checkCursorPricingCoverage(modelIds: string[]): CursorPricingCoverage {
+  const priced: string[] = [];
+  const missing: string[] = [];
+
+  for (const modelId of modelIds) {
+    if (getCursorModelCost(modelId)) {
+      priced.push(modelId);
+    } else {
+      missing.push(modelId);
+    }
+  }
+
+  return { priced, missing };
 }
 
 function cost(input: number, output: number, cacheRead: number, cacheWrite: number): OpenCodeModelCost {

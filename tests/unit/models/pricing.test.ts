@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   applyCursorModelCost,
+  checkCursorPricingCoverage,
   getCursorModelCost,
 } from "../../../src/models/pricing.js";
 
@@ -81,6 +82,17 @@ describe("models/pricing", () => {
   it("leaves unknown models unchanged", () => {
     expect(applyCursorModelCost("unknown-model", { name: "Unknown" })).toEqual({
       name: "Unknown",
+    });
+  });
+
+  it("reports pricing coverage for Cursor model ids", () => {
+    expect(checkCursorPricingCoverage([
+      "auto",
+      "gpt-5.3-codex-high",
+      "unknown-model",
+    ])).toEqual({
+      priced: ["auto", "gpt-5.3-codex-high"],
+      missing: ["unknown-model"],
     });
   });
 });

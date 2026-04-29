@@ -84,6 +84,8 @@ Non-stream responses include `usage` on the chat completion response. Stream res
 
 Cost is passed through when a provider reports it as `cost`, `totalCost`, or `total_cost`. Cursor currently reports tokens but not request cost, so `open-cursor install` and `open-cursor sync-models` also write OpenCode `cost` config for known Cursor models using the official prices from [Cursor Models & Pricing](https://cursor.com/docs/models-and-pricing). Prices are stored per million tokens as `input`, `output`, `cache_read`, `cache_write`, and `context_over_200k` when Cursor documents a long-context rate.
 
+Run `bun run check:pricing` to compare the current `cursor-agent models` output with the local official pricing map and warn when the Cursor pricing page markers change.
+
 ## Operational Notes
 
 - Proxy reuse is enabled by default (`CURSOR_ACP_REUSE_EXISTING_PROXY`); this can reuse an already-running process on port `32124`.
