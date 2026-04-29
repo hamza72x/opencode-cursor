@@ -11,6 +11,11 @@ export type CursorPricingCoverage = {
   missing: string[];
 };
 
+export type OpenCodeModelCostValidation = {
+  valid: boolean;
+  errors: string[];
+};
+
 export const CURSOR_PRICING_DOC_URL = "https://cursor.com/docs/models-and-pricing";
 
 export const CURSOR_PRICING_DOC_MARKERS = [
@@ -122,6 +127,19 @@ export function checkCursorPricingCoverage(modelIds: string[]): CursorPricingCov
   return { priced, missing };
 }
 
+export function validateOpenCodeModelCost(
+  value: unknown,
+  path = "cost",
+): OpenCodeModelCostValidation {
+  const errors: string[] = [];
+  collectCostValidationErrors(value, path, errors);
+  return { valid: errors.length === 0, errors };
+}
+
+export function isOpenCodeModelCost(value: unknown): value is OpenCodeModelCost {
+  return validateOpenCodeModelCost(value).valid;
+}
+
 function cost(input: number, output: number, cacheRead: number, cacheWrite: number): OpenCodeModelCost {
   return {
     input,
@@ -139,4 +157,40 @@ function withLongContext(
     ...base,
     context_over_200k: longContext,
   };
+}
+
+function collectCostValidationErrors(value: unknown, path: string, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  validateRequiredPrice(value.input, `${path}.input`, errors);
+  validateRequiredPrice(value.output, `${path}.output`, errors);
+  validateOptionalPrice(value.cache_read, `${path}.cache_read`, errors);
+  validateOptionalPrice(value.cache_write, `${path}.cache_write`, errors);
+
+  if (value.context_over_200k !== undefined) {
+    collectCostValidationErrors(value.context_over_200k, `${path}.context_over_200k`, errors);
+  }
+}
+
+function validateRequiredPrice(value: unknown, path: string, errors: string[]): void {
+  if (!isNonNegativeFiniteNumber(value)) {
+    errors.push(`${path} must be a non-negative finite number`);
+  }
+}
+
+function validateOptionalPrice(value: unknown, path: string, errors: string[]): void {
+  if (value !== undefined && !isNonNegativeFiniteNumber(value)) {
+    errors.push(`${path} must be a non-negative finite number`);
+  }
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

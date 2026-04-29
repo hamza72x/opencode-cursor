@@ -3,7 +3,20 @@ import {
   createOpenAiUsage,
   extractOpenAiUsageFromResult,
   normalizeCursorUsage,
+  type OpenAiUsage,
 } from "../../src/usage.js";
+
+function toStepFinishTokens(usage: OpenAiUsage) {
+  return {
+    input: usage.prompt_tokens,
+    output: usage.completion_tokens,
+    reasoning: usage.completion_tokens_details.reasoning_tokens,
+    cache: {
+      read: usage.prompt_tokens_details.cached_tokens,
+      write: usage.prompt_tokens_details.cache_write_tokens,
+    },
+  };
+}
 
 describe("usage metrics", () => {
   it("maps Cursor stream usage to OpenAI usage", () => {
@@ -69,6 +82,36 @@ describe("usage metrics", () => {
     expect(normalizeCursorUsage(undefined)).toBeUndefined();
     expect(normalizeCursorUsage({})).toBeUndefined();
     expect(normalizeCursorUsage({ inputTokens: -1, outputTokens: Number.NaN })).toBeUndefined();
+  });
+
+  it("does not emit usage when Cursor result has no usage payload", () => {
+    expect(extractOpenAiUsageFromResult({
+      type: "result",
+      subtype: "success",
+      result: "ok",
+    })).toBeUndefined();
+  });
+
+  it("provides the fields OpenCode TokenSpeed reads from step-finish parts", () => {
+    const usage = createOpenAiUsage({
+      inputTokens: 120,
+      outputTokens: 32,
+      reasoningTokens: 7,
+      cacheReadTokens: 80,
+      cacheWriteTokens: 5,
+      cost: 0.0042,
+    });
+
+    expect(toStepFinishTokens(usage)).toEqual({
+      input: 205,
+      output: 32,
+      reasoning: 7,
+      cache: {
+        read: 80,
+        write: 5,
+      },
+    });
+    expect(usage.cost).toBe(0.0042);
   });
 
   it("creates OpenAI streaming usage chunks", () => {

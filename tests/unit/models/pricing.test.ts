@@ -1,8 +1,12 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "fs";
+import { join } from "path";
 import {
   applyCursorModelCost,
   checkCursorPricingCoverage,
   getCursorModelCost,
+  isOpenCodeModelCost,
+  validateOpenCodeModelCost,
 } from "../../../src/models/pricing.js";
 
 describe("models/pricing", () => {
@@ -93,6 +97,40 @@ describe("models/pricing", () => {
     ])).toEqual({
       priced: ["auto", "gpt-5.3-codex-high"],
       missing: ["unknown-model"],
+    });
+  });
+
+  it("covers representative current Cursor model families from the fixture", () => {
+    const fixturePath = join(import.meta.dir, "../../fixtures/cursor-pricing-models.txt");
+    const modelIds = readFileSync(fixturePath, "utf8")
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    expect(checkCursorPricingCoverage(modelIds)).toEqual({
+      priced: modelIds,
+      missing: [],
+    });
+  });
+
+  it("emits OpenCode-compatible cost config for known models", () => {
+    const cost = getCursorModelCost("gpt-5.5-high");
+
+    expect(isOpenCodeModelCost(cost)).toBe(true);
+    expect(validateOpenCodeModelCost(cost)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("reports invalid OpenCode cost config shapes", () => {
+    expect(validateOpenCodeModelCost({
+      input: 1,
+      output: -1,
+      context_over_200k: { input: 2 },
+    })).toEqual({
+      valid: false,
+      errors: [
+        "cost.output must be a non-negative finite number",
+        "cost.context_over_200k.output must be a non-negative finite number",
+      ],
     });
   });
 });
