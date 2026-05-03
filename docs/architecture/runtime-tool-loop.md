@@ -86,6 +86,28 @@ The OpenCode plugin tool hook (`buildToolHookEntries` in `src/plugin.ts`) regist
 
 When tool-hook execution is used, path/cwd defaults are normalized against tool context (`worktree` / `directory`) to keep file and shell behavior workspace-aware.
 
+## Usage Metrics
+
+`cursor-agent --output-format stream-json` emits a final `result` event with token usage when Cursor reports it. The proxy maps that payload to OpenAI-compatible usage so OpenCode can emit `step-finish` token data for tools such as OpenCode TokenSpeed Monitor.
+
+Cursor fields are mapped as follows:
+
+- `inputTokens + cacheReadTokens + cacheWriteTokens` -> `usage.prompt_tokens`
+- `outputTokens` -> `usage.completion_tokens`
+- `reasoningTokens` -> `usage.completion_tokens_details.reasoning_tokens`
+- `cacheReadTokens` -> `usage.prompt_tokens_details.cached_tokens`
+- `cacheWriteTokens` -> `usage.prompt_tokens_details.cache_write_tokens`
+
+`prompt_tokens` includes cache tokens because OpenAI-compatible parsers treat `cached_tokens` as a subset of total prompt tokens.
+
+Non-stream responses include `usage` on the chat completion response. Stream responses emit the normal final stop chunk, then a usage-only chunk with `choices: []`, then `[DONE]`.
+
+If Cursor omits the final `result.usage` payload, the proxy omits `usage` instead of inventing zero-token metrics. This lets OpenCode and TokenSpeed fall back to their normal behavior without receiving misleading token counts.
+
+Cost is passed through when a provider reports it as `cost`, `totalCost`, or `total_cost`. Cursor currently reports tokens but not request cost, so `open-cursor install` and `open-cursor sync-models` also write OpenCode `cost` config for known Cursor models using the official prices from [Cursor Models & Pricing](https://cursor.com/docs/models-and-pricing). Prices are stored per million tokens as `input`, `output`, `cache_read`, `cache_write`, and `context_over_200k` when Cursor documents a long-context rate.
+
+Run `bun run check:pricing` to compare the current `cursor-agent models` output with the local official pricing map and warn when the Cursor pricing page markers change. Run `bun run check:pricing:fixture` for an offline fixture-based coverage check that does not require Cursor auth or network access.
+
 ## Operational Notes
 
 - Proxy reuse is enabled by default (`CURSOR_ACP_REUSE_EXISTING_PROXY`); this can reuse an already-running process on port `32124`.

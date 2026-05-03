@@ -10,7 +10,12 @@ import { startCursorOAuth } from "./auth";
 import { LineBuffer } from "./streaming/line-buffer.js";
 import { StreamToSseConverter, formatSseDone } from "./streaming/openai-sse.js";
 import { parseStreamJsonLine } from "./streaming/parser.js";
-import { extractText, extractThinking, isAssistantText, isThinking } from "./streaming/types.js";
+import { extractText, extractThinking, isAssistantText, isResult, isThinking } from "./streaming/types.js";
+import {
+  createChatCompletionUsageChunk,
+  extractOpenAiUsageFromResult,
+  type OpenAiUsage,
+} from "./usage.js";
 import { createLogger } from "./utils/logger";
 import { RequestPerf } from "./utils/perf";
 import { parseAgentError, formatErrorForUser, stripAnsi } from "./utils/errors";
@@ -360,7 +365,12 @@ export function resolveChatParamTools(
   return PROVIDER_BOUNDARY.resolveChatParamTools(mode, existingTools, refreshedTools);
 }
 
-function createChatCompletionResponse(model: string, content: string, reasoningContent?: string) {
+function createChatCompletionResponse(
+  model: string,
+  content: string,
+  reasoningContent?: string,
+  usage?: OpenAiUsage,
+) {
   const message: { role: "assistant"; content: string; reasoning_content?: string } = {
     role: "assistant",
     content,
@@ -370,7 +380,18 @@ function createChatCompletionResponse(model: string, content: string, reasoningC
     message.reasoning_content = reasoningContent;
   }
 
-  return {
+  const response: {
+    id: string;
+    object: string;
+    created: number;
+    model: string;
+    choices: Array<{
+      index: number;
+      message: typeof message;
+      finish_reason: string;
+    }>;
+    usage?: OpenAiUsage;
+  } = {
     id: `cursor-acp-${Date.now()}`,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
@@ -383,6 +404,12 @@ function createChatCompletionResponse(model: string, content: string, reasoningC
       },
     ],
   };
+
+  if (usage) {
+    response.usage = usage;
+  }
+
+  return response;
 }
 
 function createChatCompletionChunk(id: string, created: number, model: string, deltaContent: string, done = false) {
@@ -401,10 +428,15 @@ function createChatCompletionChunk(id: string, created: number, model: string, d
   };
 }
 
-function extractCompletionFromStream(output: string): { assistantText: string; reasoningText: string } {
+function extractCompletionFromStream(output: string): {
+  assistantText: string;
+  reasoningText: string;
+  usage?: OpenAiUsage;
+} {
   const lines = output.split("\n");
   let assistantText = "";
   let reasoningText = "";
+  let usage: OpenAiUsage | undefined;
   let sawAssistantPartials = false;
 
   for (const line of lines) {
@@ -432,9 +464,13 @@ function extractCompletionFromStream(output: string): { assistantText: string; r
         reasoningText += thinking;
       }
     }
+
+    if (isResult(event)) {
+      usage = extractOpenAiUsageFromResult(event) ?? usage;
+    }
   }
 
-  return { assistantText, reasoningText };
+  return { assistantText, reasoningText, usage };
 }
 
 function formatToolUpdateEvent(update: ToolUpdate): string {
@@ -805,6 +841,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
           model,
           completion.assistantText || stdout || stderr,
           completion.reasoningText || undefined,
+          completion.usage,
         );
         return new Response(JSON.stringify(payload), {
           status: 200,
@@ -826,6 +863,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
         async start(controller) {
           let streamTerminated = false;
           let firstTokenReceived = false;
+          let usage: OpenAiUsage | undefined;
           try {
             const reader = (child.stdout as ReadableStream<Uint8Array>).getReader();
             const converter = new StreamToSseConverter(model, { id, created });
@@ -878,6 +916,10 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
                 const event = parseStreamJsonLine(line);
                 if (!event) {
                   continue;
+                }
+
+                if (isResult(event)) {
+                  usage = extractOpenAiUsageFromResult(event) ?? usage;
                 }
 
                 if (event.type === "tool_call") {
@@ -945,6 +987,9 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
               const event = parseStreamJsonLine(line);
               if (!event) {
                 continue;
+              }
+              if (isResult(event)) {
+                usage = extractOpenAiUsageFromResult(event) ?? usage;
               }
               if (event.type === "tool_call") {
                 const result = await handleToolLoopEventWithFallback({
@@ -1034,6 +1079,10 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
 
             const doneChunk = createChatCompletionChunk(id, created, model, "", true);
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(doneChunk)}\n\n`));
+            if (usage) {
+              const usageChunk = createChatCompletionUsageChunk(id, created, model, usage);
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(usageChunk)}\n\n`));
+            }
             controller.enqueue(encoder.encode(formatSseDone()));
           } finally {
             perf.mark("request:done");
@@ -1265,6 +1314,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
             model,
             completion.assistantText || stdout || stderr,
             completion.reasoningText || undefined,
+            completion.usage,
           );
 
           res.writeHead(200, { "Content-Type": "application/json" });
@@ -1291,6 +1341,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
         const stderrChunks: Buffer[] = [];
         let streamTerminated = false;
         let firstTokenReceived = false;
+        let usage: OpenAiUsage | undefined;
         child.stderr.on("data", (chunk) => {
           stderrChunks.push(Buffer.from(chunk));
         });
@@ -1363,6 +1414,10 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
               continue;
             }
 
+            if (isResult(event)) {
+              usage = extractOpenAiUsageFromResult(event) ?? usage;
+            }
+
             if (event.type === "tool_call") {
               perf.mark("tool-call");
               const result = await handleToolLoopEventWithFallback({
@@ -1433,6 +1488,10 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
             const event = parseStreamJsonLine(line);
             if (!event) {
               continue;
+            }
+
+            if (isResult(event)) {
+              usage = extractOpenAiUsageFromResult(event) ?? usage;
             }
 
             if (event.type === "tool_call") {
@@ -1539,6 +1598,10 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
             ],
           };
           res.write(`data: ${JSON.stringify(doneChunk)}\n\n`);
+          if (usage) {
+            const usageChunk = createChatCompletionUsageChunk(id, created, model, usage);
+            res.write(`data: ${JSON.stringify(usageChunk)}\n\n`);
+          }
           res.write(formatSseDone());
           res.end();
         });
