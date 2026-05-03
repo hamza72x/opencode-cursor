@@ -1634,7 +1634,7 @@ function jsonSchemaToZod(jsonSchema: any): any {
         }
         break;
       case "object":
-        zodType = z.record(z.any());
+        zodType = z.record(z.string(), z.any());
         if (p.description) {
           zodType = zodType.describe(p.description);
         }
