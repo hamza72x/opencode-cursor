@@ -1,3 +1,5 @@
+import { getCursorModelCost, type OpenCodeModelCost } from "./pricing.js";
+
 export type DiscoveredCursorModel = {
   id: string;
   name: string;
@@ -28,7 +30,8 @@ export type OpenCodeCursorModelEntry = {
   options?: {
     cursorModel: string;
   };
-  variants?: Record<string, { cursorModel: string }>;
+  variants?: Record<string, { cursorModel: string; cost?: OpenCodeModelCost }>;
+  cost?: OpenCodeModelCost;
 };
 
 export type CursorModelMergeOptions = {
@@ -311,18 +314,24 @@ export function createVariantModelEntries(models: DiscoveredCursorModel[]): {
   const groupedModelIds = new Set<string>();
 
   for (const group of groups) {
-    const variants: Record<string, { cursorModel: string }> = {};
+    const variants: Record<string, { cursorModel: string; cost?: OpenCodeModelCost }> = {};
     for (const [variant, cursorModel] of Object.entries(group.variants)) {
-      variants[variant] = { cursorModel };
+      const variantEntry: { cursorModel: string; cost?: OpenCodeModelCost } = { cursorModel };
+      const variantCost = getCursorModelCost(cursorModel);
+      if (variantCost) variantEntry.cost = variantCost;
+      variants[variant] = variantEntry;
     }
 
-    entries[group.baseId] = {
+    const groupEntry: OpenCodeCursorModelEntry = {
       name: group.name,
       options: {
         cursorModel: group.defaultCursorModelId,
       },
       variants,
     };
+    const defaultCost = getCursorModelCost(group.defaultCursorModelId);
+    if (defaultCost) groupEntry.cost = defaultCost;
+    entries[group.baseId] = groupEntry;
 
     for (const member of group.members) {
       groupedModelIds.add(member.cursorModelId);
@@ -330,7 +339,10 @@ export function createVariantModelEntries(models: DiscoveredCursorModel[]): {
   }
 
   for (const model of direct) {
-    entries[model.id] = { name: model.name };
+    const entry: OpenCodeCursorModelEntry = { name: model.name };
+    const directCost = getCursorModelCost(model.id);
+    if (directCost) entry.cost = directCost;
+    entries[model.id] = entry;
   }
 
   return { entries, groupedModelIds };
@@ -359,7 +371,7 @@ export function mergeCursorModelEntries(
   }
 
   for (const [modelId, entry] of Object.entries(entries)) {
-    models[modelId] = entry;
+    models[modelId] = mergeEntryPreservingUserFields(models[modelId], entry);
   }
 
   return {
@@ -377,7 +389,10 @@ function mergeDirectModelEntries(
   const models = { ...existingModels };
 
   for (const model of discoveredModels) {
-    models[model.id] = { name: model.name };
+    const generated: OpenCodeCursorModelEntry = { name: model.name };
+    const directCost = getCursorModelCost(model.id);
+    if (directCost) generated.cost = directCost;
+    models[model.id] = mergeEntryPreservingUserFields(models[model.id], generated);
   }
 
   return {
@@ -386,4 +401,42 @@ function mergeDirectModelEntries(
     groupedCount: 0,
     removedCount: 0,
   };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Preserve user-set cost on every sync. Only fill cost when the user has not.
+function mergeEntryPreservingUserFields(
+  existing: unknown,
+  generated: OpenCodeCursorModelEntry,
+): OpenCodeCursorModelEntry {
+  if (!isPlainObject(existing)) return generated;
+
+  const merged: Record<string, unknown> = { ...existing, ...generated };
+
+  if (existing.cost !== undefined) {
+    merged.cost = existing.cost;
+  }
+
+  if (isPlainObject(existing.variants) && isPlainObject(generated.variants)) {
+    const mergedVariants: Record<string, unknown> = { ...generated.variants };
+    for (const [variantKey, existingVariant] of Object.entries(existing.variants)) {
+      const generatedVariant = (generated.variants as Record<string, unknown>)[variantKey];
+      if (!isPlainObject(existingVariant)) continue;
+      if (!isPlainObject(generatedVariant)) {
+        mergedVariants[variantKey] = existingVariant;
+        continue;
+      }
+      const variantMerged: Record<string, unknown> = { ...generatedVariant };
+      if (existingVariant.cost !== undefined) {
+        variantMerged.cost = existingVariant.cost;
+      }
+      mergedVariants[variantKey] = variantMerged;
+    }
+    merged.variants = mergedVariants;
+  }
+
+  return merged as OpenCodeCursorModelEntry;
 }

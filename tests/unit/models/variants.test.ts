@@ -183,19 +183,73 @@ describe("models/variants", () => {
       { id: "gpt-5.5-extra-high", name: "GPT-5.5 Extra High" },
     ]);
 
-    expect(entries).toEqual({
-      "gpt-5.5": {
-        name: "GPT 5.5",
-        options: {
-          cursorModel: "gpt-5.5-medium",
-        },
-        variants: {
-          medium: { cursorModel: "gpt-5.5-medium" },
-          high: { cursorModel: "gpt-5.5-high" },
-          "extra-high": { cursorModel: "gpt-5.5-extra-high" },
-        },
+    expect(entries["gpt-5.5"]).toMatchObject({
+      name: "GPT 5.5",
+      options: { cursorModel: "gpt-5.5-medium" },
+      variants: {
+        medium: { cursorModel: "gpt-5.5-medium" },
+        high: { cursorModel: "gpt-5.5-high" },
+        "extra-high": { cursorModel: "gpt-5.5-extra-high" },
       },
     });
+  });
+
+  it("populates cost on generated entries when pricing is known", () => {
+    const { entries } = createVariantModelEntries([
+      { id: "gpt-5.5-medium", name: "GPT-5.5 Medium" },
+      { id: "gpt-5.5-high", name: "GPT-5.5 High" },
+    ]);
+
+    expect(entries["gpt-5.5"].cost).toBeDefined();
+    expect(entries["gpt-5.5"].variants?.medium.cost).toBeDefined();
+    expect(entries["gpt-5.5"].variants?.high.cost).toBeDefined();
+  });
+
+  it("omits cost when pricing is unknown", () => {
+    const { entries } = createVariantModelEntries([
+      { id: "totally-fake-model-low", name: "Fake Low" },
+      { id: "totally-fake-model-high", name: "Fake High" },
+    ]);
+
+    expect(entries["totally-fake-model"].cost).toBeUndefined();
+    expect(entries["totally-fake-model"].variants?.low.cost).toBeUndefined();
+  });
+
+  it("preserves user-set top-level cost during sync", () => {
+    const userCost = { input: 99, output: 99, cache_read: 9, cache_write: 9 };
+    const result = mergeCursorModelEntries(
+      { "auto": { name: "Auto", cost: userCost } },
+      [{ id: "auto", name: "Auto" }],
+      { variants: false, compact: false },
+    );
+
+    expect(result.models.auto).toMatchObject({ name: "Auto", cost: userCost });
+  });
+
+  it("preserves user-set variant cost during sync", () => {
+    const userVariantCost = { input: 88, output: 88, cache_read: 8, cache_write: 8 };
+    const result = mergeCursorModelEntries(
+      {
+        "gpt-5.3-codex": {
+          name: "GPT-5.3 Codex",
+          options: { cursorModel: "gpt-5.3-codex" },
+          variants: {
+            low: { cursorModel: "gpt-5.3-codex-low", cost: userVariantCost },
+          },
+        },
+      },
+      [
+        { id: "gpt-5.3-codex", name: "GPT-5.3 Codex" },
+        { id: "gpt-5.3-codex-low", name: "GPT-5.3 Codex Low" },
+        { id: "gpt-5.3-codex-high", name: "GPT-5.3 Codex High" },
+      ],
+      { variants: true, compact: false },
+    );
+
+    const merged = result.models["gpt-5.3-codex"] as any;
+    expect(merged.variants.low.cost).toEqual(userVariantCost);
+    expect(merged.variants.high.cost).toBeDefined();
+    expect(merged.variants.high.cost).not.toEqual(userVariantCost);
   });
 
   it("merges compact variant entries while preserving custom models", () => {
@@ -214,26 +268,20 @@ describe("models/variants", () => {
     );
 
     expect(result.removedCount).toBe(2);
-    expect(result.models).toEqual({
-      "custom-model": { name: "Custom" },
-      "gpt-5.3-codex": {
-        name: "GPT-5.3 Codex",
-        options: {
-          cursorModel: "gpt-5.3-codex",
-        },
-        variants: {
-          low: { cursorModel: "gpt-5.3-codex-low" },
-          high: { cursorModel: "gpt-5.3-codex-high" },
-        },
+    expect(result.models["custom-model"]).toEqual({ name: "Custom" });
+    expect(result.models["gpt-5.3-codex"]).toMatchObject({
+      name: "GPT-5.3 Codex",
+      options: { cursorModel: "gpt-5.3-codex" },
+      variants: {
+        low: { cursorModel: "gpt-5.3-codex-low" },
+        high: { cursorModel: "gpt-5.3-codex-high" },
       },
     });
   });
 
-  it("keeps default direct sync behavior unchanged", () => {
+  it("keeps default direct sync behavior", () => {
     const result = mergeCursorModelEntries(
-      {
-        "custom-model": { name: "Custom" },
-      },
+      { "custom-model": { name: "Custom" } },
       [
         { id: "gpt-5.3-codex-low", name: "GPT-5.3 Codex Low" },
         { id: "gpt-5.3-codex-high", name: "GPT-5.3 Codex High" },
@@ -241,16 +289,12 @@ describe("models/variants", () => {
       { variants: false, compact: false },
     );
 
-    expect(result).toEqual({
-      syncedCount: 2,
-      groupedCount: 0,
-      removedCount: 0,
-      models: {
-        "custom-model": { name: "Custom" },
-        "gpt-5.3-codex-low": { name: "GPT-5.3 Codex Low" },
-        "gpt-5.3-codex-high": { name: "GPT-5.3 Codex High" },
-      },
-    });
+    expect(result.syncedCount).toBe(2);
+    expect(result.groupedCount).toBe(0);
+    expect(result.removedCount).toBe(0);
+    expect(result.models["custom-model"]).toEqual({ name: "Custom" });
+    expect(result.models["gpt-5.3-codex-low"]).toMatchObject({ name: "GPT-5.3 Codex Low" });
+    expect(result.models["gpt-5.3-codex-high"]).toMatchObject({ name: "GPT-5.3 Codex High" });
   });
 
   it("keeps raw grouped entries unless compact mode is enabled", () => {
@@ -270,11 +314,9 @@ describe("models/variants", () => {
     expect(result.removedCount).toBe(0);
     expect(result.models["gpt-5.3-codex-low"]).toEqual({ name: "Old Low" });
     expect(result.models["gpt-5.3-codex-high"]).toEqual({ name: "Old High" });
-    expect(result.models["gpt-5.3-codex"]).toEqual({
+    expect(result.models["gpt-5.3-codex"]).toMatchObject({
       name: "GPT-5.3 Codex",
-      options: {
-        cursorModel: "gpt-5.3-codex",
-      },
+      options: { cursorModel: "gpt-5.3-codex" },
       variants: {
         low: { cursorModel: "gpt-5.3-codex-low" },
         high: { cursorModel: "gpt-5.3-codex-high" },
