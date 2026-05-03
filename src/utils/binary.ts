@@ -1,4 +1,11 @@
 // src/utils/binary.ts
+//
+// Resolves the cursor-agent executable path. On Windows the binary is a `.cmd`
+// shim, which Node's spawn cannot execute directly without `shell: true` —
+// callers therefore pair this resolver with `shell: process.platform === "win32"`
+// at every spawn site. That re-enables shell metacharacter interpretation, so
+// any user-controlled string passed as an argument on Windows must be treated
+// as untrusted; never concatenate user input into argv on win32.
 import { existsSync as fsExistsSync } from "fs";
 import * as pathModule from "path";
 import { homedir as osHomedir } from "os";
