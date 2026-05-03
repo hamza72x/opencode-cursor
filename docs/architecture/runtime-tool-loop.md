@@ -51,6 +51,26 @@ The boundary abstraction is implemented in `src/provider/boundary.ts` and runtim
 - Tool-loop guard with fingerprinting (`src/provider/tool-loop-guard.ts`)
 - Guarded fallback to `legacy` when enabled and specific termination/error conditions are met
 
+## Model Variant Resolution
+
+OpenCode sends custom model option fields in the provider request body. When a model variant defines `cursorModel`, OpenCode merges the selected variant value into `body.cursorModel` before the request reaches `cursor-acp`.
+
+The provider boundary resolves the runtime Cursor model in this order:
+
+1. Use `body.cursorModel` when it is a non-empty string.
+2. Otherwise normalize `body.model` by stripping the `cursor-acp/` provider prefix.
+3. Fall back to `auto` when no model is available.
+
+This lets a compact OpenCode model such as `cursor-acp/gpt-5.3-codex` call a concrete Cursor model like `gpt-5.3-codex-high` when the selected variant provides that mapping.
+
+`open-cursor sync-models --variants` generates those compact entries from `cursor-agent models`. The default `sync-models` command still writes direct raw Cursor model IDs. Add `--compact` with `--variants` to remove raw model entries that were folded into generated variant groups while preserving custom and unknown entries.
+
+Use `--dry-run` to preview the model sync without writing the config. Sync output includes added, updated, removed, priced, and skipped counts so repeated syncs are easy to audit before applying them.
+
+Use `open-cursor sync-models --json` when automation needs the same sync summary as structured output. Use `open-cursor models --explain` to inspect the generated model families, default Cursor targets, variant mappings, and direct models without modifying the config.
+
+Use `open-cursor doctor --deep` after install or sync to check Cursor model discovery, provider model config, compact variant presence, and whether configured `cursorModel` targets still exist in the current `cursor-agent models` output.
+
 ## Loop Safety and Error Handling
 
 `v1` loop safety is driven by two mechanisms:
@@ -65,6 +85,28 @@ The guard classifies outcomes (`validation`, `not_found`, `permission`, `timeout
 The OpenCode plugin tool hook (`buildToolHookEntries` in `src/plugin.ts`) registers local tools (`bash`, `read`, `write`, `edit`, `grep`, `ls`, `glob`, `mkdir`, `rm`, `stat`) and compatibility aliases such as `shell -> bash`.
 
 When tool-hook execution is used, path/cwd defaults are normalized against tool context (`worktree` / `directory`) to keep file and shell behavior workspace-aware.
+
+## Usage Metrics
+
+`cursor-agent --output-format stream-json` emits a final `result` event with token usage when Cursor reports it. The proxy maps that payload to OpenAI-compatible usage so OpenCode can emit `step-finish` token data for tools such as OpenCode TokenSpeed Monitor.
+
+Cursor fields are mapped as follows:
+
+- `inputTokens + cacheReadTokens + cacheWriteTokens` -> `usage.prompt_tokens`
+- `outputTokens` -> `usage.completion_tokens`
+- `reasoningTokens` -> `usage.completion_tokens_details.reasoning_tokens`
+- `cacheReadTokens` -> `usage.prompt_tokens_details.cached_tokens`
+- `cacheWriteTokens` -> `usage.prompt_tokens_details.cache_write_tokens`
+
+`prompt_tokens` includes cache tokens because OpenAI-compatible parsers treat `cached_tokens` as a subset of total prompt tokens.
+
+Non-stream responses include `usage` on the chat completion response. Stream responses emit the normal final stop chunk, then a usage-only chunk with `choices: []`, then `[DONE]`.
+
+If Cursor omits the final `result.usage` payload, the proxy omits `usage` instead of inventing zero-token metrics. This lets OpenCode and TokenSpeed fall back to their normal behavior without receiving misleading token counts.
+
+Cost is passed through when a provider reports it as `cost`, `totalCost`, or `total_cost`. Cursor currently reports tokens but not request cost, so `open-cursor install` and `open-cursor sync-models` also write OpenCode `cost` config for known Cursor models using the official prices from [Cursor Models & Pricing](https://cursor.com/docs/models-and-pricing). Prices are stored per million tokens as `input`, `output`, `cache_read`, `cache_write`, and `context_over_200k` when Cursor documents a long-context rate.
+
+Run `bun run check:pricing` to compare the current `cursor-agent models` output with the local official pricing map and warn when the Cursor pricing page markers change. Run `bun run check:pricing:fixture` for an offline fixture-based coverage check that does not require Cursor auth or network access.
 
 ## Operational Notes
 

@@ -75,8 +75,13 @@ export type StreamJsonResultEvent = {
   type: "result";
   subtype?: "success" | "error" | string;
   timestamp?: number;
+  duration_ms?: number;
+  duration_api_ms?: number;
   session_id?: string;
+  request_id?: string;
+  result?: string;
   is_error?: boolean;
+  usage?: Record<string, unknown>;
   error?: {
     message?: string;
     code?: number | string;

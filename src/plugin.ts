@@ -10,7 +10,12 @@ import { startCursorOAuth } from "./auth";
 import { LineBuffer } from "./streaming/line-buffer.js";
 import { StreamToSseConverter, formatSseDone } from "./streaming/openai-sse.js";
 import { parseStreamJsonLine } from "./streaming/parser.js";
-import { extractText, extractThinking, isAssistantText, isThinking } from "./streaming/types.js";
+import { extractText, extractThinking, isAssistantText, isResult, isThinking } from "./streaming/types.js";
+import {
+  createChatCompletionUsageChunk,
+  extractOpenAiUsageFromResult,
+  type OpenAiUsage,
+} from "./usage.js";
 import { createLogger } from "./utils/logger";
 import { RequestPerf } from "./utils/perf";
 import { parseAgentError, formatErrorForUser, stripAnsi } from "./utils/errors";
@@ -219,37 +224,76 @@ function isNonConfigPath(pathValue: string): boolean {
   return !isWithinPath(getOpenCodeConfigPrefix(), pathValue);
 }
 
+// Filesystem roots are never a meaningful workspace: accepting "/" (or a bare
+// Windows drive root like "C:\") makes every tool treat the whole machine as
+// the project, which is both unsafe and a common symptom of a daemon that
+// was launched without a real cwd (e.g. systemd unit without WorkingDirectory).
+export function isRootPath(pathValue: string): boolean {
+  if (!pathValue) {
+    return false;
+  }
+  const resolved = resolve(pathValue);
+  if (resolved === "/") {
+    return true;
+  }
+  return /^[A-Za-z]:[\\/]?$/.test(resolved);
+}
+
+function isAcceptableWorkspace(pathValue: string, configPrefix: string): boolean {
+  if (!pathValue) {
+    return false;
+  }
+  if (isRootPath(pathValue)) {
+    return false;
+  }
+  if (isWithinPath(configPrefix, pathValue)) {
+    return false;
+  }
+  return true;
+}
+
 const SESSION_WORKSPACE_CACHE_LIMIT = 200;
 
-function resolveWorkspaceDirectory(worktree: string | undefined, directory: string | undefined): string {
-  const envWorkspace = process.env.CURSOR_ACP_WORKSPACE?.trim();
-  if (envWorkspace) {
-    return resolve(envWorkspace);
-  }
-
-  const envProjectDir = process.env.OPENCODE_CURSOR_PROJECT_DIR?.trim();
-  if (envProjectDir) {
-    return resolve(envProjectDir);
-  }
-
+export function resolveWorkspaceDirectory(
+  worktree: string | undefined,
+  directory: string | undefined,
+): string {
   const configPrefix = getOpenCodeConfigPrefix();
 
+  const envWorkspace = resolveCandidate(process.env.CURSOR_ACP_WORKSPACE);
+  if (envWorkspace && !isRootPath(envWorkspace)) {
+    return envWorkspace;
+  }
+
+  const envProjectDir = resolveCandidate(process.env.OPENCODE_CURSOR_PROJECT_DIR);
+  if (envProjectDir && !isRootPath(envProjectDir)) {
+    return envProjectDir;
+  }
+
   const worktreeCandidate = resolveCandidate(worktree);
-  if (worktreeCandidate && !isWithinPath(configPrefix, worktreeCandidate)) {
+  if (isAcceptableWorkspace(worktreeCandidate, configPrefix)) {
     return worktreeCandidate;
   }
 
   const dirCandidate = resolveCandidate(directory);
-  if (dirCandidate && !isWithinPath(configPrefix, dirCandidate)) {
+  if (isAcceptableWorkspace(dirCandidate, configPrefix)) {
     return dirCandidate;
   }
 
   const cwd = resolve(process.cwd());
-  if (cwd && !isWithinPath(configPrefix, cwd)) {
+  if (isAcceptableWorkspace(cwd, configPrefix)) {
     return cwd;
   }
 
-  return dirCandidate || cwd || configPrefix;
+  // Fall back to the user's home directory rather than "/" when every other
+  // signal is unusable. $HOME is always writable for the current user and
+  // keeps tool scopes sane even when the daemon was spawned from root.
+  const home = resolveCandidate(homedir());
+  if (home && !isRootPath(home)) {
+    return home;
+  }
+
+  return configPrefix;
 }
 
 type ProxyRuntimeState = {
@@ -321,7 +365,12 @@ export function resolveChatParamTools(
   return PROVIDER_BOUNDARY.resolveChatParamTools(mode, existingTools, refreshedTools);
 }
 
-function createChatCompletionResponse(model: string, content: string, reasoningContent?: string) {
+function createChatCompletionResponse(
+  model: string,
+  content: string,
+  reasoningContent?: string,
+  usage?: OpenAiUsage,
+) {
   const message: { role: "assistant"; content: string; reasoning_content?: string } = {
     role: "assistant",
     content,
@@ -331,7 +380,18 @@ function createChatCompletionResponse(model: string, content: string, reasoningC
     message.reasoning_content = reasoningContent;
   }
 
-  return {
+  const response: {
+    id: string;
+    object: string;
+    created: number;
+    model: string;
+    choices: Array<{
+      index: number;
+      message: typeof message;
+      finish_reason: string;
+    }>;
+    usage?: OpenAiUsage;
+  } = {
     id: `cursor-acp-${Date.now()}`,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
@@ -344,6 +404,12 @@ function createChatCompletionResponse(model: string, content: string, reasoningC
       },
     ],
   };
+
+  if (usage) {
+    response.usage = usage;
+  }
+
+  return response;
 }
 
 function createChatCompletionChunk(id: string, created: number, model: string, deltaContent: string, done = false) {
@@ -362,10 +428,15 @@ function createChatCompletionChunk(id: string, created: number, model: string, d
   };
 }
 
-export function extractCompletionFromStream(output: string): { assistantText: string; reasoningText: string } {
+export function extractCompletionFromStream(output: string): {
+  assistantText: string;
+  reasoningText: string;
+  usage?: OpenAiUsage;
+} {
   const lines = output.split("\n");
   let assistantText = "";
   let reasoningText = "";
+  let usage: OpenAiUsage | undefined;
   let sawAssistantPartials = false;
   let sawThinkingPartials = false;
 
@@ -400,9 +471,13 @@ export function extractCompletionFromStream(output: string): { assistantText: st
         }
       }
     }
+
+    if (isResult(event)) {
+      usage = extractOpenAiUsageFromResult(event) ?? usage;
+    }
   }
 
-  return { assistantText, reasoningText };
+  return { assistantText, reasoningText, usage };
 }
 
 function formatToolUpdateEvent(update: ToolUpdate): string {
@@ -628,6 +703,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
       // DEBUG: Log raw request structure for tool-loop investigation
       debugLogToFile("raw_request_body", {
         model: body?.model,
+        cursorModel: body?.cursorModel,
         stream,
         toolCount: tools.length,
         toolNames: tools.map((t: any) => t?.function?.name ?? t?.name ?? "unknown"),
@@ -644,8 +720,8 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
 
       const subagentNames = readSubagentNames();
       const prompt = buildPromptFromMessages(messages, tools, subagentNames);
-      const model = boundaryContext.run("normalizeRuntimeModel", (boundary) =>
-        boundary.normalizeRuntimeModel(body?.model),
+      const model = boundaryContext.run("resolveRuntimeModel", (boundary) =>
+        boundary.resolveRuntimeModel(body?.model, body?.cursorModel),
       );
       const msgSummaryBun = messages.map((m: any, i: number) => {
         const role = m?.role ?? "?";
@@ -772,6 +848,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
           model,
           completion.assistantText || stdout || stderr,
           completion.reasoningText || undefined,
+          completion.usage,
         );
         return new Response(JSON.stringify(payload), {
           status: 200,
@@ -793,6 +870,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
         async start(controller) {
           let streamTerminated = false;
           let firstTokenReceived = false;
+          let usage: OpenAiUsage | undefined;
           try {
             const reader = (child.stdout as ReadableStream<Uint8Array>).getReader();
             const converter = new StreamToSseConverter(model, { id, created });
@@ -845,6 +923,10 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
                 const event = parseStreamJsonLine(line);
                 if (!event) {
                   continue;
+                }
+
+                if (isResult(event)) {
+                  usage = extractOpenAiUsageFromResult(event) ?? usage;
                 }
 
                 if (event.type === "tool_call") {
@@ -912,6 +994,9 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
               const event = parseStreamJsonLine(line);
               if (!event) {
                 continue;
+              }
+              if (isResult(event)) {
+                usage = extractOpenAiUsageFromResult(event) ?? usage;
               }
               if (event.type === "tool_call") {
                 const result = await handleToolLoopEventWithFallback({
@@ -1001,6 +1086,10 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
 
             const doneChunk = createChatCompletionChunk(id, created, model, "", true);
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(doneChunk)}\n\n`));
+            if (usage) {
+              const usageChunk = createChatCompletionUsageChunk(id, created, model, usage);
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(usageChunk)}\n\n`));
+            }
             controller.enqueue(encoder.encode(formatSseDone()));
           } finally {
             perf.mark("request:done");
@@ -1109,8 +1198,8 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
 
       const subagentNames = readSubagentNames();
       const prompt = buildPromptFromMessages(messages, tools, subagentNames);
-      const model = boundaryContext.run("normalizeRuntimeModel", (boundary) =>
-        boundary.normalizeRuntimeModel(bodyData?.model),
+      const model = boundaryContext.run("resolveRuntimeModel", (boundary) =>
+        boundary.resolveRuntimeModel(bodyData?.model, bodyData?.cursorModel),
       );
       const msgSummary = messages.map((m: any, i: number) => {
         const role = m?.role ?? "?";
@@ -1232,6 +1321,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
             model,
             completion.assistantText || stdout || stderr,
             completion.reasoningText || undefined,
+            completion.usage,
           );
 
           res.writeHead(200, { "Content-Type": "application/json" });
@@ -1258,6 +1348,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
         const stderrChunks: Buffer[] = [];
         let streamTerminated = false;
         let firstTokenReceived = false;
+        let usage: OpenAiUsage | undefined;
         child.stderr.on("data", (chunk) => {
           stderrChunks.push(Buffer.from(chunk));
         });
@@ -1330,6 +1421,10 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
               continue;
             }
 
+            if (isResult(event)) {
+              usage = extractOpenAiUsageFromResult(event) ?? usage;
+            }
+
             if (event.type === "tool_call") {
               perf.mark("tool-call");
               const result = await handleToolLoopEventWithFallback({
@@ -1400,6 +1495,10 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
             const event = parseStreamJsonLine(line);
             if (!event) {
               continue;
+            }
+
+            if (isResult(event)) {
+              usage = extractOpenAiUsageFromResult(event) ?? usage;
             }
 
             if (event.type === "tool_call") {
@@ -1506,6 +1605,10 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
             ],
           };
           res.write(`data: ${JSON.stringify(doneChunk)}\n\n`);
+          if (usage) {
+            const usageChunk = createChatCompletionUsageChunk(id, created, model, usage);
+            res.write(`data: ${JSON.stringify(usageChunk)}\n\n`);
+          }
           res.write(formatSseDone());
           res.end();
         });
@@ -1601,7 +1704,7 @@ function jsonSchemaToZod(jsonSchema: any): any {
         }
         break;
       case "object":
-        zodType = z.record(z.any());
+        zodType = z.record(z.string(), z.any());
         if (p.description) {
           zodType = zodType.describe(p.description);
         }
