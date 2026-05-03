@@ -68,4 +68,17 @@ describe("extractCompletionFromStream", () => {
       reasoningText: "Plan more",
     });
   });
+
+  it("does not duplicate thinking text when multiple final accumulated events arrive without partials", () => {
+    // Mirrors the assistant branch: multiple finals should replace, not concatenate.
+    const output = [
+      JSON.stringify({ type: "thinking", text: "Plan more" }),
+      JSON.stringify({ type: "thinking", text: "Plan more" }),
+    ].join("\n");
+
+    expect(extractCompletionFromStream(output)).toEqual({
+      assistantText: "",
+      reasoningText: "Plan more",
+    });
+  });
 });

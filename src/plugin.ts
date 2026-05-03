@@ -467,7 +467,7 @@ export function extractCompletionFromStream(output: string): {
           reasoningText += thinking;
           sawThinkingPartials = true;
         } else if (!sawThinkingPartials) {
-          reasoningText += thinking;
+          reasoningText = thinking;
         }
       }
     }
