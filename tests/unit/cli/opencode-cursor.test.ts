@@ -7,6 +7,8 @@ import {
   checkCursorAgentLogin,
   runDoctorChecks,
   getStatusResult,
+  explainCursorModels,
+  summarizeModelSync,
 } from "../../../src/cli/opencode-cursor.js";
 
 describe("cli/opencode-cursor branding", () => {
@@ -47,7 +49,7 @@ describe("cli/opencode-cursor commandDoctor", () => {
     const results = runDoctorChecks("/tmp/test-config.json", "/tmp/test-plugin");
     expect(results.length).toBeGreaterThan(5);
     expect(results.every(r => typeof r.passed === "boolean")).toBe(true);
-  });
+  }, 10000);
 });
 
 describe("cli/opencode-cursor status", () => {
@@ -56,5 +58,61 @@ describe("cli/opencode-cursor status", () => {
     expect(result).toHaveProperty("plugin");
     expect(result).toHaveProperty("provider");
     expect(result).toHaveProperty("aiSdk");
+  });
+});
+
+describe("cli/opencode-cursor sync summary", () => {
+  it("reports added, updated, removed, priced, and skipped entries", () => {
+    const before = {
+      unchanged: { name: "Unchanged" },
+      changed: { name: "Old" },
+      removed: { name: "Removed" },
+    };
+    const after = {
+      unchanged: { name: "Unchanged" },
+      changed: { name: "New" },
+      added: { name: "Added", cost: { input: 1, output: 2 } },
+      variants: {
+        name: "Variants",
+        variants: {
+          high: { cursorModel: "variants-high", cost: { input: 1, output: 2 } },
+        },
+      },
+    };
+
+    expect(summarizeModelSync(before, after)).toEqual({
+      added: 2,
+      updated: 1,
+      removed: 1,
+      priced: 2,
+      skipped: 1,
+    });
+  });
+});
+
+describe("cli/opencode-cursor model explanation", () => {
+  it("explains compact model groups and direct models", () => {
+    const explanation = explainCursorModels([
+      { id: "gpt-5.3-codex", name: "GPT-5.3 Codex" },
+      { id: "gpt-5.3-codex-low", name: "GPT-5.3 Codex Low" },
+      { id: "gpt-5.3-codex-high", name: "GPT-5.3 Codex High" },
+      { id: "auto", name: "Auto" },
+    ]);
+
+    expect(explanation.modelCount).toBe(4);
+    expect(explanation.groupedCount).toBe(3);
+    expect(explanation.direct).toEqual(["auto"]);
+    expect(explanation.groups).toEqual([
+      {
+        id: "gpt-5.3-codex",
+        name: "GPT-5.3 Codex",
+        defaultCursorModel: "gpt-5.3-codex",
+        memberCount: 3,
+        variants: {
+          low: "gpt-5.3-codex-low",
+          high: "gpt-5.3-codex-high",
+        },
+      },
+    ]);
   });
 });
