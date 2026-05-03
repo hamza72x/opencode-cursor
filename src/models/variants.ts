@@ -46,46 +46,6 @@ export type CursorModelMergeResult = {
   removedCount: number;
 };
 
-const DIRECT_MODEL_IDS = new Set([
-  "auto",
-  "composer-1.5",
-  "kimi-k2.5",
-  "gemini-3.1-pro",
-  "gemini-3-flash",
-  "gpt-5-mini",
-]);
-
-const VARIANT_SUFFIXES = [
-  "max-thinking-fast",
-  "high-thinking-fast",
-  "thinking-high-fast",
-  "medium-thinking",
-  "high-thinking",
-  "max-thinking",
-  "low-fast",
-  "medium-fast",
-  "high-fast",
-  "xhigh-fast",
-  "thinking-low",
-  "thinking-medium",
-  "thinking-high",
-  "thinking-xhigh",
-  "thinking-max",
-  "extra-high",
-  "thinking",
-  "none",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "fast",
-];
-
-const QUALIFIED_VARIANT_PREFIXES = [
-  "spark-preview",
-];
-
 const DEFAULT_VARIANT_ORDER = [
   null,
   "medium",
@@ -128,69 +88,102 @@ const VARIANT_DISPLAY_ORDER = [
   "spark-preview-xhigh",
 ];
 
-function parseVariant(
-  modelId: string,
-  knownModelIds: Set<string>,
-): { baseId: string; variant: string } | null {
-  const qualifiedVariant = parseQualifiedVariant(modelId, knownModelIds);
-  if (qualifiedVariant) return qualifiedVariant;
-
-  for (const variant of VARIANT_SUFFIXES) {
-    const suffix = `-${variant}`;
-    if (!modelId.endsWith(suffix)) continue;
-
-    const baseId = modelId.slice(0, -suffix.length);
-    if (isSafeBaseId(baseId)) {
-      return resolveQualifiedBaseVariant(baseId, variant, knownModelIds);
-    }
-  }
-
-  return null;
-}
-
-function parseQualifiedVariant(
-  modelId: string,
-  knownModelIds: Set<string>,
-): { baseId: string; variant: string } | null {
-  for (const qualifier of QUALIFIED_VARIANT_PREFIXES) {
-    const suffix = `-${qualifier}`;
-    if (!modelId.endsWith(suffix)) continue;
-
-    const baseId = modelId.slice(0, -suffix.length);
-    if (knownModelIds.has(baseId) && isSafeBaseId(baseId)) {
-      return { baseId, variant: qualifier };
-    }
-  }
-
-  return null;
-}
-
-function resolveQualifiedBaseVariant(
-  baseId: string,
-  variant: string,
-  knownModelIds: Set<string>,
-): { baseId: string; variant: string } {
-  for (const qualifier of QUALIFIED_VARIANT_PREFIXES) {
-    const suffix = `-${qualifier}`;
-    if (!baseId.endsWith(suffix)) continue;
-
-    const parentBaseId = baseId.slice(0, -suffix.length);
-    if (knownModelIds.has(parentBaseId) && isSafeBaseId(parentBaseId)) {
-      return {
-        baseId: parentBaseId,
-        variant: `${qualifier}-${variant}`,
-      };
-    }
-  }
-
-  return { baseId, variant };
-}
-
 function isSafeBaseId(baseId: string): boolean {
   const parts = baseId.split("-").filter(Boolean);
   if (parts.length < 2) return false;
   if (baseId === "gpt-5") return false;
   return true;
+}
+
+// Token-aligned hyphen-truncated prefixes, longest first, filtered through
+// isSafeBaseId. Example: "gpt-5.3-codex-spark-preview-low" yields
+// ["gpt-5.3-codex-spark-preview", "gpt-5.3-codex", "gpt-5.3"].
+function generateBaseCandidates(modelId: string): string[] {
+  const tokens = modelId.split("-");
+  const candidates: string[] = [];
+  for (let i = tokens.length - 1; i >= 1; i--) {
+    const prefix = tokens.slice(0, i).join("-");
+    if (isSafeBaseId(prefix)) candidates.push(prefix);
+  }
+  return candidates;
+}
+
+type CandidateStat = { count: number; diversity: number };
+
+// childCount(B) = number of models that have B as a strict token-prefix
+// (model starts with `${B}-`). diversity = distinct first tokens after the
+// prefix; used to prefer bases that fan out across multiple sibling families.
+function computeStats(
+  candidate: string,
+  modelIds: readonly string[],
+): CandidateStat {
+  const prefix = `${candidate}-`;
+  const firstTokens = new Set<string>();
+  let count = 0;
+  for (const otherId of modelIds) {
+    if (!otherId.startsWith(prefix)) continue;
+    count++;
+    const firstToken = otherId.slice(prefix.length).split("-", 1)[0];
+    if (firstToken) firstTokens.add(firstToken);
+  }
+  return { count, diversity: firstTokens.size };
+}
+
+// Selection priority for the chosen base of a model:
+//   A. Shortest explicit base with >= 2 strict children. An explicit
+//      candidate that already heads its own family wins outright. Shortest
+//      wins so spark-preview-low folds under gpt-5.3-codex when both
+//      gpt-5.3-codex and gpt-5.3-codex-spark-preview are in the set.
+//   B. Best implicit base (any candidate with >= 2 strict children). Pick
+//      highest first-token diversity, breaking ties by longer base. Keeps
+//      claude-4.6-opus (fans out into high/max) from being shadowed by
+//      claude-4.6-opus-high (only thinking-fan-out) or by claude-4.6 (only
+//      opus-fan-out).
+//   C. Shortest explicit fallback regardless of childCount. Catches cases
+//      like composer-2-fast where the only candidate is explicit but has no
+//      other siblings to satisfy the >= 2 rule.
+function chooseBase(
+  modelId: string,
+  knownModelIds: Set<string>,
+  modelIds: readonly string[],
+): string | null {
+  const candidates = generateBaseCandidates(modelId);
+  if (candidates.length === 0) return null;
+
+  const stats = new Map<string, CandidateStat>();
+  for (const candidate of candidates) {
+    stats.set(candidate, computeStats(candidate, modelIds));
+  }
+
+  let stepA: string | null = null;
+  for (const candidate of candidates) {
+    if (!knownModelIds.has(candidate)) continue;
+    const stat = stats.get(candidate);
+    if (!stat || stat.count < 2 || stat.diversity < 2) continue;
+    if (stepA === null || candidate.length < stepA.length) stepA = candidate;
+  }
+  if (stepA !== null) return stepA;
+
+  let stepB: { base: string; diversity: number } | null = null;
+  for (const candidate of candidates) {
+    const stat = stats.get(candidate);
+    if (!stat || stat.count < 2) continue;
+    if (
+      stepB === null ||
+      stat.diversity > stepB.diversity ||
+      (stat.diversity === stepB.diversity && candidate.length > stepB.base.length)
+    ) {
+      stepB = { base: candidate, diversity: stat.diversity };
+    }
+  }
+  if (stepB !== null) return stepB.base;
+
+  let stepC: string | null = null;
+  for (const candidate of candidates) {
+    if (!knownModelIds.has(candidate)) continue;
+    if (stepC === null || candidate.length < stepC.length) stepC = candidate;
+  }
+  return stepC;
 }
 
 function getDefaultMember(members: CursorModelVariant[]): CursorModelVariant {
@@ -246,39 +239,52 @@ function createGroup(baseId: string, members: CursorModelVariant[]): CursorModel
 }
 
 export function groupCursorModels(models: DiscoveredCursorModel[]): CursorModelGroups {
-  const byId = new Map(models.map(model => [model.id, model]));
-  const knownModelIds = new Set(byId.keys());
-  const candidates = new Map<string, CursorModelVariant[]>();
-  const direct: DiscoveredCursorModel[] = [];
+  const knownModelIds = new Set(models.map(model => model.id));
+  const modelIds = models.map(model => model.id);
 
+  const preferredBase = new Map<string, string>();
   for (const model of models) {
-    if (DIRECT_MODEL_IDS.has(model.id)) {
-      direct.push(model);
-      continue;
-    }
-
-    const parsed = parseVariant(model.id, knownModelIds);
-    if (!parsed) {
-      continue;
-    }
-
-    const members = candidates.get(parsed.baseId) || [];
-    members.push({
-      baseId: parsed.baseId,
-      variant: parsed.variant,
-      cursorModelId: model.id,
-      name: model.name,
-    });
-    candidates.set(parsed.baseId, members);
+    const base = chooseBase(model.id, knownModelIds, modelIds);
+    if (base) preferredBase.set(model.id, base);
   }
 
-  for (const model of models) {
-    if (DIRECT_MODEL_IDS.has(model.id)) continue;
-    if (!candidates.has(model.id)) continue;
+  // A model that is itself chosen as a base by some other model joins its own
+  // group as variant=null instead of being absorbed into a (different) base.
+  // This preserves explicit-base semantics: e.g. gpt-5.3-codex stays the head
+  // of its group rather than being folded under gpt-5.3 just because chooseBase
+  // for gpt-5.3-codex would otherwise return gpt-5.3.
+  const baseSet = new Set<string>(preferredBase.values());
 
-    candidates.get(model.id)?.push({
-      baseId: model.id,
-      variant: null,
+  const groupMembers = new Map<string, CursorModelVariant[]>();
+  const groupOrder: string[] = [];
+
+  const recordMember = (baseId: string, member: CursorModelVariant): void => {
+    const existing = groupMembers.get(baseId);
+    if (existing) {
+      existing.push(member);
+      return;
+    }
+    groupMembers.set(baseId, [member]);
+    groupOrder.push(baseId);
+  };
+
+  for (const model of models) {
+    if (baseSet.has(model.id) && knownModelIds.has(model.id)) {
+      recordMember(model.id, {
+        baseId: model.id,
+        variant: null,
+        cursorModelId: model.id,
+        name: model.name,
+      });
+      continue;
+    }
+
+    const base = preferredBase.get(model.id);
+    if (!base) continue;
+
+    recordMember(base, {
+      baseId: base,
+      variant: model.id.slice(base.length + 1),
       cursorModelId: model.id,
       name: model.name,
     });
@@ -287,18 +293,16 @@ export function groupCursorModels(models: DiscoveredCursorModel[]): CursorModelG
   const groupedIds = new Set<string>();
   const groups: CursorModelGroup[] = [];
 
-  for (const [baseId, members] of candidates) {
-    if (members.length < 2 && !byId.has(baseId)) continue;
-
+  for (const baseId of groupOrder) {
+    const members = groupMembers.get(baseId);
+    if (!members || members.length < 2) continue;
     groups.push(createGroup(baseId, members));
-    for (const member of members) {
-      groupedIds.add(member.cursorModelId);
-    }
+    for (const member of members) groupedIds.add(member.cursorModelId);
   }
 
+  const direct: DiscoveredCursorModel[] = [];
   for (const model of models) {
     if (groupedIds.has(model.id)) continue;
-    if (direct.some(candidate => candidate.id === model.id)) continue;
     direct.push(model);
   }
 
