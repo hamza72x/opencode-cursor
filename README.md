@@ -41,58 +41,50 @@ Add to `~/.config/opencode/opencode.json` (or `%USERPROFILE%\.config\opencode\op
         "baseURL": "http://127.0.0.1:32124/v1"
       },
       "models": {
-        "cursor-acp/auto": { "name": "Auto" },
-        "cursor-acp/composer-1.5": { "name": "Composer 1.5" },
-        "cursor-acp/composer-1": { "name": "Composer 1" },
-        "cursor-acp/opus-4.6-thinking": { "name": "Claude 4.6 Opus (Thinking)" },
-        "cursor-acp/opus-4.6": { "name": "Claude 4.6 Opus" },
-        "cursor-acp/sonnet-4.6": { "name": "Claude 4.6 Sonnet" },
-        "cursor-acp/sonnet-4.6-thinking": { "name": "Claude 4.6 Sonnet (Thinking)" },
-        "cursor-acp/opus-4.5": { "name": "Claude 4.5 Opus" },
-        "cursor-acp/opus-4.5-thinking": { "name": "Claude 4.5 Opus (Thinking)" },
-        "cursor-acp/sonnet-4.5": { "name": "Claude 4.5 Sonnet" },
-        "cursor-acp/sonnet-4.5-thinking": { "name": "Claude 4.5 Sonnet (Thinking)" },
-        "cursor-acp/gpt-5.4-high": { "name": "GPT-5.4 High" },
-        "cursor-acp/gpt-5.4-high-fast": { "name": "GPT-5.4 High Fast" },
-        "cursor-acp/gpt-5.4-xhigh": { "name": "GPT-5.4 Extra High" },
-        "cursor-acp/gpt-5.4-xhigh-fast": { "name": "GPT-5.4 Extra High Fast" },
-        "cursor-acp/gpt-5.4-medium": { "name": "GPT-5.4" },
-        "cursor-acp/gpt-5.4-medium-fast": { "name": "GPT-5.4 Fast" },
-        "cursor-acp/gpt-5.3-codex": { "name": "GPT-5.3 Codex" },
-        "cursor-acp/gpt-5.3-codex-fast": { "name": "GPT-5.3 Codex Fast" },
-        "cursor-acp/gpt-5.3-codex-low": { "name": "GPT-5.3 Codex Low" },
-        "cursor-acp/gpt-5.3-codex-low-fast": { "name": "GPT-5.3 Codex Low Fast" },
-        "cursor-acp/gpt-5.3-codex-high": { "name": "GPT-5.3 Codex High" },
-        "cursor-acp/gpt-5.3-codex-high-fast": { "name": "GPT-5.3 Codex High Fast" },
-        "cursor-acp/gpt-5.3-codex-xhigh": { "name": "GPT-5.3 Codex Extra High" },
-        "cursor-acp/gpt-5.3-codex-xhigh-fast": { "name": "GPT-5.3 Codex Extra High Fast" },
-        "cursor-acp/gpt-5.3-codex-spark-preview": { "name": "GPT-5.3 Codex Spark" },
-        "cursor-acp/gpt-5.2": { "name": "GPT-5.2" },
-        "cursor-acp/gpt-5.2-high": { "name": "GPT-5.2 High" },
-        "cursor-acp/gpt-5.2-codex": { "name": "GPT-5.2 Codex" },
-        "cursor-acp/gpt-5.2-codex-fast": { "name": "GPT-5.2 Codex Fast" },
-        "cursor-acp/gpt-5.2-codex-low": { "name": "GPT-5.2 Codex Low" },
-        "cursor-acp/gpt-5.2-codex-low-fast": { "name": "GPT-5.2 Codex Low Fast" },
-        "cursor-acp/gpt-5.2-codex-high": { "name": "GPT-5.2 Codex High" },
-        "cursor-acp/gpt-5.2-codex-high-fast": { "name": "GPT-5.2 Codex High Fast" },
-        "cursor-acp/gpt-5.2-codex-xhigh": { "name": "GPT-5.2 Codex Extra High" },
-        "cursor-acp/gpt-5.2-codex-xhigh-fast": { "name": "GPT-5.2 Codex Extra High Fast" },
+        "cursor-acp/auto":              { "name": "Auto" },
+
+        "cursor-acp/claude-opus-4-7":   { "name": "Claude 4.7 Opus" },
+        "cursor-acp/claude-4.6-opus":   { "name": "Claude 4.6 Opus" },
+        "cursor-acp/claude-4.6-sonnet": { "name": "Claude 4.6 Sonnet" },
+        "cursor-acp/claude-4.5-opus":   { "name": "Claude 4.5 Opus" },
+        "cursor-acp/claude-4.5-sonnet": { "name": "Claude 4.5 Sonnet" },
+        "cursor-acp/claude-4.5-haiku":  { "name": "Claude 4.5 Haiku" },
+        "cursor-acp/claude-4-sonnet":   { "name": "Claude 4 Sonnet" },
+
+        "cursor-acp/gpt-5.5":           { "name": "GPT-5.5" },
+        "cursor-acp/gpt-5.4":           { "name": "GPT-5.4" },
+        "cursor-acp/gpt-5.4-mini":      { "name": "GPT-5.4 Mini" },
+        "cursor-acp/gpt-5.4-nano":      { "name": "GPT-5.4 Nano" },
+        "cursor-acp/gpt-5.3-codex":     { "name": "GPT-5.3 Codex" },
+        "cursor-acp/gpt-5.2":           { "name": "GPT-5.2" },
+        "cursor-acp/gpt-5.2-codex":     { "name": "GPT-5.2 Codex" },
+        "cursor-acp/gpt-5.1-codex":     { "name": "GPT-5.1 Codex" },
         "cursor-acp/gpt-5.1-codex-max": { "name": "GPT-5.1 Codex Max" },
-        "cursor-acp/gpt-5.1-codex-max-high": { "name": "GPT-5.1 Codex Max High" },
-        "cursor-acp/gpt-5.1-codex-mini": { "name": "GPT-5.1 Codex Mini" },
-        "cursor-acp/gpt-5.1-high": { "name": "GPT-5.1 High" },
-        "cursor-acp/gemini-3.1-pro": { "name": "Gemini 3.1 Pro" },
-        "cursor-acp/gemini-3-pro": { "name": "Gemini 3 Pro" },
-        "cursor-acp/gemini-3-flash": { "name": "Gemini 3 Flash" },
-        "cursor-acp/grok": { "name": "Grok" },
-        "cursor-acp/kimi-k2.5": { "name": "Kimi K2.5" }
+        "cursor-acp/gpt-5.1-codex-mini":{ "name": "GPT-5.1 Codex Mini" },
+        "cursor-acp/gpt-5-mini":        { "name": "GPT-5 Mini" },
+
+        "cursor-acp/gemini-3.1-pro":    { "name": "Gemini 3.1 Pro" },
+        "cursor-acp/gemini-3-pro":      { "name": "Gemini 3 Pro" },
+        "cursor-acp/gemini-3-flash":    { "name": "Gemini 3 Flash" },
+
+        "cursor-acp/composer-2":        { "name": "Composer 2" },
+        "cursor-acp/composer-2-fast":   { "name": "Composer 2 Fast" },
+        "cursor-acp/composer-1.5":      { "name": "Composer 1.5" },
+
+        "cursor-acp/grok-4-20":         { "name": "Grok 4.20" },
+        "cursor-acp/kimi-k2.5":         { "name": "Kimi K2.5" }
       }
     }
   }
 }
 ```
 
-> Update models anytime: `cursor-agent models`
+> **Refresh anytime** with the bundled CLI:
+> ```bash
+> open-cursor sync-models                       # plain list
+> open-cursor sync-models --variants --compact  # group thinking / fast / -low/-high variants under each base
+> ```
+> The `--variants --compact` form is recommended — it folds dozens of `*-thinking-fast`, `*-high-fast`, etc. into a single entry per family with a `variants` map, and includes `cost` from the official Cursor pricing table so OpenCode TokenSpeed can render usage correctly. Direct `cursor-agent models` still works if you prefer the raw list.
 </details>
 
 <details>
@@ -120,7 +112,7 @@ go build -o ./installer ./cmd/installer && ./installer
 <summary><b>Option E</b> — LLM paste</summary>
 
 ```
-Install open-cursor for OpenCode: edit ~/.config/opencode/opencode.json, add "@rama_nigg/open-cursor@latest" to "plugin", add a "cursor-acp" provider with npm "@ai-sdk/openai-compatible" and models from `cursor-agent models` prefixed with "cursor-acp/". Auth: `cursor-agent login`. Verify: `opencode models | grep cursor-acp`.
+Install open-cursor for OpenCode: edit ~/.config/opencode/opencode.json, add "@rama_nigg/open-cursor@latest" to "plugin", add a "cursor-acp" provider with npm "@ai-sdk/openai-compatible" and a baseURL of http://127.0.0.1:32124/v1. Populate models by running `open-cursor sync-models --variants --compact` after install (or copy the model list from the README). Auth: `cursor-agent login`. Verify: `opencode models | grep cursor-acp`.
 ```
 </details>
 
