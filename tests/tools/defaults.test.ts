@@ -1,10 +1,26 @@
 import { describe, it, expect } from "bun:test";
 import { ToolRegistry } from "../../src/tools/core/registry.js";
-import { registerDefaultTools, getDefaultToolNames } from "../../src/tools/defaults.js";
+import { registerDefaultTools, getDefaultToolNames, resolveShellOption } from "../../src/tools/defaults.js";
 import { executeWithChain } from "../../src/tools/core/executor.js";
 import { LocalExecutor } from "../../src/tools/executors/local.js";
 
 describe("Default Tools", () => {
+  it("uses the Windows default shell instead of /bin/bash when SHELL is unset", () => {
+    const shell = resolveShellOption({ platform: "win32", env: {} });
+
+    expect(shell).not.toBe("/bin/bash");
+    expect(shell).toBe(true);
+  });
+
+  it("uses ComSpec for the Windows shell when available", () => {
+    const shell = resolveShellOption({
+      platform: "win32",
+      env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+    });
+
+    expect(shell).toBe("C:\\Windows\\System32\\cmd.exe");
+  });
+
   it("should register all 10 default tools", () => {
     const registry = new ToolRegistry();
     registerDefaultTools(registry);

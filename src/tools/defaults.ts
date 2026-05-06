@@ -41,7 +41,7 @@ export function registerDefaultTools(registry: ToolRegistry): void {
 
     return new Promise<string>((resolve, reject) => {
       const proc = spawn(command, {
-        shell: process.env.SHELL || "/bin/bash",
+        shell: resolveShellOption(),
         cwd,
       });
 
@@ -638,6 +638,20 @@ function resolveTimeoutMs(value: unknown): number {
   if (raw === undefined) return 30_000;
   // Values ≤ 600 are treated as seconds (no real use case for a <600ms shell timeout).
   return raw <= 600 ? raw * 1000 : raw;
+}
+
+export function resolveShellOption(deps: {
+  platform?: NodeJS.Platform;
+  env?: Record<string, string | undefined>;
+} = {}): string | boolean {
+  const platform = deps.platform ?? process.platform;
+  const env = deps.env ?? process.env;
+
+  if (platform === "win32") {
+    return env.ComSpec || env.COMSPEC || true;
+  }
+
+  return env.SHELL || "/bin/bash";
 }
 
 function resolveBoolean(value: unknown, defaultValue: boolean): boolean {
