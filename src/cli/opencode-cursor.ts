@@ -6,6 +6,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  realpathSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -1035,6 +1036,26 @@ function main() {
   }
 }
 
-if (process.env.NODE_ENV !== "test" && fileURLToPath(import.meta.url) === resolve(process.argv[1] || "")) {
+function resolveEntrypointArg(argvPath: string | undefined): string {
+  if (!argvPath) return "";
+  return resolve(argvPath);
+}
+
+function toRealPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+export function isCliEntrypoint(metaUrl: string, argvPath: string | undefined): boolean {
+  const currentPath = fileURLToPath(metaUrl);
+  const argvResolved = resolveEntrypointArg(argvPath);
+  if (!argvResolved) return false;
+  return currentPath === argvResolved || toRealPath(currentPath) === toRealPath(argvResolved);
+}
+
+if (process.env.NODE_ENV !== "test" && isCliEntrypoint(import.meta.url, process.argv[1])) {
   main();
 }

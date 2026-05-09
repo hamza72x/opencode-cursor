@@ -1,5 +1,9 @@
 // tests/unit/cli/opencode-cursor.test.ts
 import { describe, expect, it } from "bun:test";
+import { closeSync, mkdtempSync, openSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   getBrandingHeader,
   checkBun,
@@ -9,7 +13,34 @@ import {
   getStatusResult,
   explainCursorModels,
   summarizeModelSync,
+  isCliEntrypoint,
 } from "../../../src/cli/opencode-cursor.js";
+
+describe("cli/opencode-cursor entrypoint", () => {
+  it("detects invocation through a symlinked bin", () => {
+    const dir = mkdtempSync(join(tmpdir(), "open-cursor-bin-"));
+    const binPath = join(dir, "open-cursor");
+    const realPath = join(dir, "opencode-cursor.js");
+    closeSync(openSync(realPath, "w"));
+    symlinkSync(realPath, binPath);
+
+    try {
+      expect(isCliEntrypoint(pathToFileURL(realPath).href, binPath)).toBe(true);
+      expect(isCliEntrypoint(pathToFileURL(binPath).href, binPath)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not treat unrelated argv paths as the cli entrypoint", () => {
+    expect(
+      isCliEntrypoint(
+        pathToFileURL(resolve("dist/cli/opencode-cursor.js")).href,
+        resolve("dist/cli/discover.js"),
+      ),
+    ).toBe(false);
+  });
+});
 
 describe("cli/opencode-cursor branding", () => {
   it("returns ASCII art header with correct format", () => {
