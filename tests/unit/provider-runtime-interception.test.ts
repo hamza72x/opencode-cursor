@@ -278,8 +278,8 @@ describe("provider runtime interception fallback", () => {
     expect(interceptedArgs).toContain("\"content\":\"hello\"");
   });
 
-  it("repairs edit content payloads into canonical edit arguments in v1", async () => {
-    let interceptedArgs = "";
+  it("emits a non-fatal hint for edit content payloads without old_string in v1", async () => {
+    let interceptedCount = 0;
     const toolResults: any[] = [];
     const result = await handleToolLoopEventV1({
       ...createBaseOptions({
@@ -311,21 +311,69 @@ describe("provider runtime interception fallback", () => {
         onToolResult: async (toolResult) => {
           toolResults.push(toolResult);
         },
-        onInterceptedToolCall: async (toolCall) => {
-          interceptedArgs = toolCall.function.arguments;
+        onInterceptedToolCall: async () => {
+          interceptedCount += 1;
         },
       }),
       boundary: createProviderBoundary("v1", "cursor-acp"),
     });
 
-    expect(result.intercepted).toBe(true);
-    expect(result.skipConverter).toBe(true);
-    expect(result.terminate).toBeUndefined();
-    expect(interceptedArgs).toContain("\"path\":\"TODO.md\"");
-    expect(interceptedArgs).toContain("\"old_string\":\"\"");
-    expect(interceptedArgs).toContain("\"new_string\":\"full rewrite\"");
-    expect(interceptedArgs).not.toContain("\"content\":");
-    expect(toolResults).toHaveLength(0);
+    expect(result).toEqual({ intercepted: false, skipConverter: true });
+    expect(interceptedCount).toBe(0);
+    expect(toolResults).toHaveLength(1);
+    expect(toolResults[0]?.choices?.[0]?.delta?.content).toContain("Skipped malformed tool call");
+    expect(toolResults[0]?.choices?.[0]?.delta?.content).toContain("old_string");
+  });
+
+  it("emits a non-fatal hint for explicit empty edit old_string in v1", async () => {
+    let interceptedCount = 0;
+    const toolResults: any[] = [];
+    const result = await handleToolLoopEventV1({
+      ...createBaseOptions({
+        event: {
+          type: "tool_call",
+          call_id: "c_empty_old",
+          tool_call: {
+            editToolCall: {
+              args: {
+                path: "TODO.md",
+                old_string: "",
+                new_string: "-- test\nreturn {",
+              },
+            },
+          },
+        } as any,
+        allowedToolNames: new Set(["edit"]),
+        toolSchemaMap: new Map([
+          [
+            "edit",
+            {
+              type: "object",
+              properties: {
+                path: { type: "string" },
+                old_string: { type: "string" },
+                new_string: { type: "string" },
+              },
+              required: ["path", "old_string", "new_string"],
+              additionalProperties: false,
+            },
+          ],
+        ]),
+        onToolResult: async (toolResult) => {
+          toolResults.push(toolResult);
+        },
+        onInterceptedToolCall: async () => {
+          interceptedCount += 1;
+        },
+      }),
+      boundary: createProviderBoundary("v1", "cursor-acp"),
+    });
+
+    expect(result).toEqual({ intercepted: false, skipConverter: true });
+    expect(interceptedCount).toBe(0);
+    expect(toolResults).toHaveLength(1);
+    expect(toolResults[0]?.choices?.[0]?.delta?.content).toContain("Skipped malformed tool call");
+    expect(toolResults[0]?.choices?.[0]?.delta?.content).toContain("old_string");
   });
 
   it("emits a non-fatal hint and skips malformed edit execution in v1 pass-through mode", async () => {
@@ -632,7 +680,7 @@ describe("provider runtime interception fallback", () => {
     expect(result.terminate?.errorClass).toBe("success");
   });
 
-  it("does not fallback on multi-tool success loop-guard termination (edit + context_info history)", async () => {
+  it("does not fallback on multi-tool success loop-guard termination (write + context_info history)", async () => {
     let fallbackCalled = false;
     const guard = createToolLoopGuard(
       [
@@ -644,11 +692,10 @@ describe("provider runtime interception fallback", () => {
               id: "edit-1",
               type: "function",
               function: {
-                name: "edit",
+                name: "write",
                 arguments: JSON.stringify({
                   path: "TODO.md",
-                  old_string: "",
-                  new_string: "ok",
+                  content: "ok",
                 }),
               },
             },
@@ -682,23 +729,22 @@ describe("provider runtime interception fallback", () => {
           type: "tool_call",
           call_id: "edit-2",
           tool_call: {
-            editToolCall: {
-              args: { path: "TODO.md", streamContent: "ok" },
+            writeToolCall: {
+              args: { path: "TODO.md", content: "ok" },
             },
           },
         } as any,
-        allowedToolNames: new Set(["edit"]),
+        allowedToolNames: new Set(["write"]),
         toolSchemaMap: new Map([
           [
-            "edit",
+            "write",
             {
               type: "object",
               properties: {
                 path: { type: "string" },
-                old_string: { type: "string" },
-                new_string: { type: "string" },
+                content: { type: "string" },
               },
-              required: ["path", "old_string", "new_string"],
+              required: ["path", "content"],
               additionalProperties: false,
             },
           ],

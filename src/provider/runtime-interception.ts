@@ -190,20 +190,7 @@ export async function handleToolLoopEventLegacy(
         return { intercepted: false, skipConverter: true, terminate: validationTermination };
       }
 
-      const reroutedWrite = tryRerouteEditToWrite(
-        normalizedToolCall,
-        compat.normalizedArgs,
-        allowedToolNames,
-        toolSchemaMap,
-      );
-      if (reroutedWrite) {
-        log.debug("Rerouting malformed edit call to write (legacy)", {
-          path: reroutedWrite.path,
-          missing: compat.validation.missing,
-          typeErrors: compat.validation.typeErrors,
-        });
-        normalizedToolCall = reroutedWrite.toolCall;
-      } else if (shouldEmitNonFatalSchemaValidationHint(normalizedToolCall, compat.validation)) {
+      if (shouldEmitNonFatalSchemaValidationHint(normalizedToolCall, compat.validation)) {
         const hintChunk = createNonFatalSchemaValidationHintChunk(
           responseMeta,
           normalizedToolCall,
@@ -385,24 +372,6 @@ export async function handleToolLoopEventV1(
         return { intercepted: false, skipConverter: true };
       }
       return { intercepted: false, skipConverter: true, terminate: termination };
-    }
-    const reroutedWrite = tryRerouteEditToWrite(
-      normalizedToolCall,
-      compat.normalizedArgs,
-      allowedToolNames,
-      toolSchemaMap,
-    );
-    if (reroutedWrite) {
-      log.debug("Rerouting malformed edit call to write", {
-        path: reroutedWrite.path,
-        missing: compat.validation.missing,
-        typeErrors: compat.validation.typeErrors,
-      });
-      await onInterceptedToolCall(reroutedWrite.toolCall);
-      return {
-        intercepted: true,
-        skipConverter: true,
-      };
     }
     if (
       schemaValidationFailureMode === "pass_through"
@@ -807,53 +776,6 @@ function shouldUsePassThroughForEditSchema(event: StreamJsonToolCallEvent): bool
     ? rawName.slice(0, -"ToolCall".length)
     : rawName;
   return normalizedName.toLowerCase() === "edit";
-}
-
-function tryRerouteEditToWrite(
-  toolCall: OpenAiToolCall,
-  normalizedArgs: Record<string, unknown>,
-  allowedToolNames: Set<string>,
-  toolSchemaMap: Map<string, unknown>,
-): { path: string; toolCall: OpenAiToolCall } | null {
-  if (toolCall.function.name.toLowerCase() !== "edit") {
-    return null;
-  }
-  if (!allowedToolNames.has("write") || !toolSchemaMap.has("write")) {
-    return null;
-  }
-
-  const path = typeof normalizedArgs.path === "string" && normalizedArgs.path.length > 0
-    ? normalizedArgs.path
-    : null;
-  if (!path) {
-    return null;
-  }
-
-  const content =
-    typeof normalizedArgs.new_string === "string"
-      ? normalizedArgs.new_string
-      : typeof normalizedArgs.content === "string"
-        ? normalizedArgs.content
-        : null;
-  if (content === null) {
-    return null;
-  }
-
-  const oldString = normalizedArgs.old_string;
-  if (typeof oldString === "string" && oldString.length > 0) {
-    return null;
-  }
-
-  return {
-    path,
-    toolCall: {
-      ...toolCall,
-      function: {
-        name: "write",
-        arguments: JSON.stringify({ path, content }),
-      },
-    },
-  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

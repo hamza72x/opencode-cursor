@@ -261,8 +261,8 @@ function normalizeToolSpecificArgs(toolName: string, args: JsonRecord): JsonReco
   if (!hasStringNew && typeof content === "string") {
     repaired.new_string = content;
   }
-  if (typeof repaired.new_string === "string" && !hasStringOld) {
-    repaired.old_string = "";
+  if (hasStringOld && repaired.old_string === "") {
+    delete repaired.old_string;
   }
 
   return repaired;

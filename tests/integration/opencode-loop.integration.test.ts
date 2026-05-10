@@ -397,7 +397,7 @@ describe("OpenCode-owned tool loop integration", () => {
     expect(json.choices?.[0]?.finish_reason).toBe("tool_calls");
   });
 
-  it("repairs non-streaming edit args and returns tool call payload", async () => {
+  it("skips non-streaming edit content payloads without old_string", async () => {
     process.env.MOCK_CURSOR_SCENARIO = "tool-edit-invalid";
     process.env.MOCK_CURSOR_PROMPT_FILE = "";
 
@@ -409,13 +409,9 @@ describe("OpenCode-owned tool loop integration", () => {
     });
 
     const json: any = await response.json();
-    expect(json.choices?.[0]?.message?.tool_calls?.[0]?.function?.name).toBe("edit");
-    expect(json.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments).toContain("\"path\":\"TODO.md\"");
-    expect(json.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments).toContain("\"old_string\":\"\"");
-    expect(json.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments).toContain("\"new_string\":\"full rewrite\"");
-    expect(json.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments).not.toContain("\"content\":");
-    expect(json.choices?.[0]?.message?.content).toBeNull();
-    expect(json.choices?.[0]?.finish_reason).toBe("tool_calls");
+    expect(json.choices?.[0]?.message?.tool_calls).toBeUndefined();
+    expect(json.choices?.[0]?.message?.content).toContain("edit fallback text");
+    expect(json.choices?.[0]?.finish_reason).toBe("stop");
   });
 
   // TODO: Fix test isolation issue - this test passes alone but fails in full suite
