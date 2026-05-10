@@ -1843,11 +1843,15 @@ function applyToolContextDefaults(
 /**
  * Build tool hook entries from local registry
  */
+const NATIVE_TOOL_HOOK_EXCLUSIONS = new Set(["grep"]);
+
 function buildToolHookEntries(registry: CoreRegistry, fallbackBaseDir?: string): Record<string, any> {
   const entries: Record<string, any> = {};
   const sessionWorkspaceBySession = new Map<string, string>();
   const tools = registry.list();
   for (const t of tools) {
+    if (NATIVE_TOOL_HOOK_EXCLUSIONS.has(t.name)) continue;
+
     const handler = registry.getHandler(t.name);
     if (!handler) continue;
 

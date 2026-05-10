@@ -54,7 +54,7 @@ describe("Plugin tool hook", () => {
     expect(toolNames).toContain("read");
     expect(toolNames).toContain("write");
     expect(toolNames).toContain("edit");
-    expect(toolNames).toContain("grep");
+    expect(toolNames).not.toContain("grep");
     expect(toolNames).toContain("ls");
     expect(toolNames).toContain("glob");
 

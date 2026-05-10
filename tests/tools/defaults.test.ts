@@ -267,6 +267,28 @@ describe("Default Tools", () => {
     fs.unlinkSync(tmpFile);
   });
 
+  it("should treat grep patterns that start with a dash as patterns", async () => {
+    const registry = new ToolRegistry();
+    registerDefaultTools(registry);
+    const executor = new LocalExecutor(registry);
+
+    const fs = await import("fs");
+    const tmpFile = `/tmp/test-grep-dash-${Date.now()}.txt`;
+    fs.writeFileSync(tmpFile, "--grep\nplain\n", "utf-8");
+
+    try {
+      const result = await executeWithChain([executor], "grep", {
+        pattern: "--grep",
+        path: tmpFile
+      });
+
+      expect(result.status).toBe("success");
+      expect(result.output).toContain("--grep");
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  });
+
   it("should retry grep with extended regex when BSD basic regex rejects pattern", async () => {
     const registry = new ToolRegistry();
     registerDefaultTools(registry);

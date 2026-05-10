@@ -274,7 +274,7 @@ export function registerDefaultTools(registry: ToolRegistry): void {
     if (include) {
       grepArgs.push(`--include=${include}`);
     }
-    grepArgs.push(pattern, path);
+    grepArgs.push("-e", pattern, path);
 
     const runGrep = async (extraArgs: string[] = []) => {
       return execFileAsync("grep", [...extraArgs, ...grepArgs], { timeout: 30000 });
