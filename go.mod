@@ -1,4 +1,4 @@
-module github.com/nomadcxx/opencode-cursor
+module github.com/hamza72x/opencode-cursor
 
 go 1.25.6
 

@@ -1,7 +1,7 @@
 # Gap Analysis: opencode-cursor vs Competing Projects
 
 **Date**: 2026-01-23
-**Project**: nomadcxx/opencode-cursor
+**Project**: hamza72x/opencode-cursor
 **Compared Against**: 15+ Cursor integration projects
 
 ---
@@ -16,7 +16,7 @@ Our implementation is a **minimal stdin/stdout wrapper** (~220 lines) focused on
 
 ## 1. Direct Comparison: roshan-c/cursor-acp (Most Similar)
 
-| Feature | Our Plugin (nomadcxx/opencode-cursor) | roshan-c/cursor-acp | Gap |
+| Feature | Our Plugin (hamza72x/opencode-cursor) | roshan-c/cursor-acp | Gap |
 |-----------|-------------------------------------------|----------------------|-----|
 | **Protocol** | Custom OpenAI-compatible format | **Agent Client Protocol (ACP)** | ❌ We don't use ACP standard |
 | **Streaming** | Manual line buffering | **NDJSON with proper framing** | ⚠️ Both work, but ACP is standard |
@@ -51,7 +51,7 @@ async initialize(req: InitializeRequest): Promise<InitializeResponse> {
 }
 ```
 
-**Our Equivalent** (from [index.ts#L14-L39](https://github.com/nomadcxx/opencode-cursor/blob/main/src/index.ts#L14-L39)):
+**Our Equivalent** (from [index.ts#L14-L39](https://github.com/hamza72x/opencode-cursor/blob/main/src/index.ts#L14-L39)):
 ```typescript
 auth: {
   provider: "cursor-acp",
@@ -364,7 +364,7 @@ async "chat.params"(input, output) {
 
 ### 4.4 Delta Streaming - UX Optimization
 
-**Current State (from [index.ts#L120-L158](https://github.com/nomadcxx/opencode-cursor/blob/main/src/index.ts#L120-L158)):**
+**Current State (from [index.ts#L120-L158](https://github.com/hamza72x/opencode-cursor/blob/main/src/index.ts#L120-L158)):**
 ```typescript
 for await (const chunk of child.stdout) {
   const data = JSON.parse(line.slice(6));
@@ -417,7 +417,7 @@ if (evt.type === "assistant") {
 
 ### 4.5 Cancellation - Can We Improve?
 
-**Current State** (from [index.ts#L111-L118](https://github.com/nomadcxx/opencode-cursor/blob/main/src/index.ts#L111-L118)):
+**Current State** (from [index.ts#L111-L118](https://github.com/hamza72x/opencode-cursor/blob/main/src/index.ts#L111-L118)):
 ```typescript
 const cleanup = () => {
   clearTimeout(timeoutId);
@@ -619,7 +619,7 @@ Simplicity ───────────────────────
     │    ◀────────────────────────────│
     │    yet-another-opencode-cursor-auth (~250 LOC)
     │   ◀───────────────────────────│
-    │   nomadcxx/opencode-cursor (220 LOC) ◀────────
+    │   hamza72x/opencode-cursor (220 LOC) ◀────────
     ▼                                   │
     ───────────────────────────────────
 ```

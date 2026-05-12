@@ -2,7 +2,7 @@
 set -e
 
 # OpenCode-Cursor one-line installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/Nomadcxx/opencode-cursor/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/hamza72x/opencode-cursor/main/install.sh | bash
 # Prefer npm if available (easiest upgrades). Otherwise:
 # - With Go: runs TUI installer from source.
 # - Without Go: runs shell-only install from source (bun + cursor-agent required).
@@ -78,7 +78,7 @@ if command -v go &>/dev/null; then
             exit 1
         fi
     else
-        if ! git clone --depth 1 https://github.com/Nomadcxx/opencode-cursor.git .; then
+        if ! git clone --depth 1 https://github.com/hamza72x/opencode-cursor.git .; then
             echo "Error: git clone failed. Check your network connection and GitHub access."
             exit 1
         fi

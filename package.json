@@ -57,11 +57,11 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Nomadcxx/opencode-cursor.git"
+    "url": "git+https://github.com/hamza72x/opencode-cursor.git"
   },
-  "homepage": "https://github.com/Nomadcxx/opencode-cursor#readme",
+  "homepage": "https://github.com/hamza72x/opencode-cursor#readme",
   "bugs": {
-    "url": "https://github.com/Nomadcxx/opencode-cursor/issues"
+    "url": "https://github.com/hamza72x/opencode-cursor/issues"
   },
   "keywords": [
     "opencode",

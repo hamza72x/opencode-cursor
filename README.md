@@ -14,7 +14,7 @@ No prompt limits. No broken streams. Full thinking + tool support in OpenCode. Y
 
 **Linux & macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Nomadcxx/opencode-cursor/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hamza72x/opencode-cursor/main/install.sh | bash
 ```
 
 **Windows:**
@@ -102,7 +102,7 @@ Upgrade: `npm update -g @rama_nigg/open-cursor`
 <summary><b>Option D</b> — Go TUI installer</summary>
 
 ```bash
-git clone https://github.com/Nomadcxx/opencode-cursor.git
+git clone https://github.com/hamza72x/opencode-cursor.git
 cd opencode-cursor
 go build -o ./installer ./cmd/installer && ./installer
 ```
@@ -120,7 +120,7 @@ Install open-cursor for OpenCode: edit ~/.config/opencode/opencode.json, add "@r
 <summary><b>Option F</b> — Manual (from source)</summary>
 
 ```bash
-git clone https://github.com/Nomadcxx/opencode-cursor.git && cd opencode-cursor
+git clone https://github.com/hamza72x/opencode-cursor.git && cd opencode-cursor
 bun install && bun run build
 ln -sf $(pwd)/dist/plugin-entry.js ~/.config/opencode/plugin/cursor-acp.js
 ./scripts/sync-models.sh
